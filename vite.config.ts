@@ -22,8 +22,19 @@ export default defineConfig({
         globals: {},
       },
     },
+    // Copy WASM files to dist
+    assetsInlineLimit: 0,
+  },
+  // Properly handle WASM files
+  optimizeDeps: {
+    exclude: ['polygon-background-wasm'],
   },
   server: {
     open: '/test/index.html',
+    // Proper MIME type for WASM
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
 });

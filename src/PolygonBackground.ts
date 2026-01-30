@@ -1,5 +1,4 @@
 import type {
-  Point,
   PolygonBackgroundOptions,
   ResolvedOptions,
   LightConfig,
@@ -16,21 +15,14 @@ import {
   DEFAULT_TRANSITION,
   DEFAULT_PERFORMANCE,
 } from './types';
-import { triangulate } from './delaunay';
-import { fbm3D, seedNoise } from './noise';
-import {
-  calculateTriangleLighting,
-  applyLighting,
-  parseColorToRGB,
-  interpolateGradient,
-} from './lighting';
 import {
   getTheme,
   interpolateThemes,
   type ThemeDefinition,
 } from './themes';
-import { TWO_PI } from './constants';
-import { clamp01, smoothstep } from './utils';
+import { WebGLRenderer } from './webgl/WebGLRenderer';
+import type { RenderData } from './webgl/WebGLRenderer';
+import { initWasm, WasmSimulation } from './WasmSimulation';
 
 /**
  * Animated polygon background component using Delaunay triangulation
@@ -39,9 +31,8 @@ import { clamp01, smoothstep } from './utils';
 export class PolygonBackground {
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  private renderer: WebGLRenderer;
   private options: ResolvedOptions;
-  private points: Point[] = [];
   private animationId: number | null = null;
   private paused: boolean = false;
   private running: boolean = false;
@@ -71,10 +62,18 @@ export class PolygonBackground {
   private frameCount: number = 0;
   private fps: number = 0;
   private fpsUpdateTime: number = 0;
+  private fpsElement: HTMLDivElement | null = null;
 
   // Delta time for frame-independent animation
   private lastUpdateTime: number = 0;
   private readonly TARGET_FRAME_TIME: number = 1000 / 60; // 60fps baseline (~16.67ms)
+
+  // WASM simulation
+  private wasmSimulation: WasmSimulation | null = null;
+
+  // Cached dimensions to avoid layout thrashing
+  private cachedWidth: number = 0;
+  private cachedHeight: number = 0;
 
   constructor(container: HTMLElement, options?: PolygonBackgroundOptions) {
     this.container = container;
@@ -86,9 +85,6 @@ export class PolygonBackground {
     // Merge options with theme defaults
     this.options = this.resolveOptions(options);
 
-    // Seed noise for consistent terrain
-    seedNoise(Date.now());
-
     // Create canvas element
     this.canvas = document.createElement('canvas');
     this.canvas.style.position = 'absolute';
@@ -99,12 +95,8 @@ export class PolygonBackground {
     this.canvas.style.zIndex = '-1';
     this.canvas.style.pointerEvents = 'none';
 
-    // Get 2D context
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Failed to get 2D canvas context');
-    }
-    this.ctx = ctx;
+    // Create WebGL renderer
+    this.renderer = new WebGLRenderer(this.canvas);
 
     // Ensure container has positioning for absolute canvas
     const containerStyle = window.getComputedStyle(this.container);
@@ -129,13 +121,37 @@ export class PolygonBackground {
 
     // Initial setup
     this.updateCanvasSize();
-    this.initializePoints();
 
     // Initialize time
     this.startTime = performance.now();
 
-    // Auto-start
-    this.start();
+    // Initialize WASM, then start
+    this.initializeWasm().then(() => {
+      this.start();
+    });
+  }
+
+  /**
+   * Initialize WASM simulation
+   */
+  private async initializeWasm(): Promise<void> {
+    const available = await initWasm();
+    if (!available) {
+      throw new Error('WASM module failed to load. WebAssembly is required.');
+    }
+
+    const rect = this.container.getBoundingClientRect();
+    this.wasmSimulation = new WasmSimulation(
+      rect.width,
+      rect.height,
+      this.options.pointCount
+    );
+    this.wasmSimulation.setNoiseParams(
+      this.options.height.noiseScale,
+      this.options.height.animationSpeed,
+      this.options.height.centerFalloff,
+      this.options.height.intensity
+    );
   }
 
   /**
@@ -243,28 +259,17 @@ export class PolygonBackground {
    * Handle container resize
    */
   private handleResize(): void {
-    const oldWidth = this.canvas.width;
-    const oldHeight = this.canvas.height;
-
     this.updateCanvasSize();
 
-    const newWidth = this.canvas.width;
-    const newHeight = this.canvas.height;
+    const rect = this.container.getBoundingClientRect();
 
-    // Scale point positions to new dimensions
-    if (oldWidth > 0 && oldHeight > 0) {
-      const scaleX = newWidth / oldWidth;
-      const scaleY = newHeight / oldHeight;
-
-      for (const point of this.points) {
-        point.x *= scaleX;
-        point.y *= scaleY;
-      }
+    // Update WASM simulation size
+    if (this.wasmSimulation) {
+      this.wasmSimulation.resize(rect.width, rect.height);
     }
 
     // Optionally adjust point count based on size
     if (this.options.scalePointsWithSize) {
-      const rect = this.container.getBoundingClientRect();
       const targetCount = Math.floor(
         (rect.width * rect.height * this.options.pointsPerPixel) / 100
       );
@@ -282,6 +287,10 @@ export class PolygonBackground {
     const newWidth = rect.width * dpr;
     const newHeight = rect.height * dpr;
 
+    // Cache dimensions for use in render loop
+    this.cachedWidth = rect.width;
+    this.cachedHeight = rect.height;
+
     // Only resize if dimensions actually changed
     if (this.canvas.width === newWidth && this.canvas.height === newHeight) {
       return;
@@ -290,119 +299,30 @@ export class PolygonBackground {
     this.canvas.width = newWidth;
     this.canvas.height = newHeight;
 
-    // Reset transform and apply DPR scaling
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.ctx.scale(dpr, dpr);
-
-    // Immediately fill with background color to prevent white flash
-    this.ctx.fillStyle = this.options.backgroundColor;
-    this.ctx.fillRect(0, 0, rect.width, rect.height);
-  }
-
-  /**
-   * Initialize points with random positions and velocities
-   */
-  private initializePoints(): void {
-    const rect = this.container.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-
-    this.points = [];
-
-    for (let i = 0; i < this.options.pointCount; i++) {
-      this.points.push(this.createRandomPoint(width, height));
-    }
-  }
-
-  /**
-   * Create a point with random position and velocity
-   */
-  private createRandomPoint(width: number, height: number): Point {
-    // Base velocity range: -0.5 to 0.5 pixels per frame
-    const baseVelocity = 0.5;
-
-    const x = Math.random() * width;
-    const y = Math.random() * height;
-
-    // Calculate initial height from noise
-    const baseZ = this.calculateBaseHeight(x, y, width, height, 0);
-
-    return {
-      x,
-      y,
-      z: baseZ,
-      baseZ,
-      vx: (Math.random() - 0.5) * baseVelocity * 2,
-      vy: (Math.random() - 0.5) * baseVelocity * 2,
-    };
-  }
-
-  /**
-   * Calculate base height from noise for a position
-   */
-  private calculateBaseHeight(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    time: number
-  ): number {
-    const { noiseScale, centerFalloff, animationSpeed } = this.options.height;
-
-    // Sample noise
-    let z = fbm3D(
-      x * noiseScale,
-      y * noiseScale,
-      time * animationSpeed,
-      4, // octaves
-      0.5, // persistence
-      2.0 // lacunarity
-    );
-
-    // Normalize from [-1, 1] to [0, 1]
-    z = (z + 1) / 2;
-
-    // Apply center falloff (higher in center)
-    if (centerFalloff > 0) {
-      const cx = width / 2;
-      const cy = height / 2;
-      const maxDist = Math.sqrt(cx * cx + cy * cy);
-      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-      const falloff = 1 - (dist / maxDist) * centerFalloff;
-      z *= falloff;
-    }
-
-    return z;
+    // Update WebGL viewport
+    this.renderer.resize(newWidth, newHeight);
   }
 
   /**
    * Adjust the number of points (add or remove)
    */
   private adjustPointCount(targetCount: number): void {
-    const rect = this.container.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-
-    while (this.points.length < targetCount) {
-      this.points.push(this.createRandomPoint(width, height));
-    }
-
-    while (this.points.length > targetCount) {
-      this.points.pop();
+    if (this.wasmSimulation) {
+      this.wasmSimulation.setPointCount(targetCount);
     }
   }
 
   /**
-   * Update point positions and heights
-   * @param deltaTime - Time elapsed since last update, normalized to 60fps baseline
+   * Update WASM simulation
    */
-  private updatePoints(deltaTime: number): void {
-    const rect = this.container.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-    const time = this.currentTime;
+  private updateWasm(deltaTime: number): void {
+    if (!this.wasmSimulation) return;
 
-    const { mode: heightMode, intensity: heightIntensity } = this.options.height;
+    // Use cached dimensions
+    const width = this.cachedWidth;
+    const height = this.cachedHeight;
+
+    const { mode: heightMode } = this.options.height;
     const { enabled: mouseEnabled, radius, radiusUnit, heightInfluence } = this.options.mouse;
 
     // Calculate mouse radius in pixels
@@ -410,44 +330,25 @@ export class PolygonBackground {
       ? Math.min(width, height) * (radius / 100)
       : radius;
 
-    for (const point of this.points) {
-      // Apply velocity with speed multiplier and delta time for frame-independent movement
-      point.x += point.vx * this.options.speed * deltaTime;
-      point.y += point.vy * this.options.speed * deltaTime;
+    // Update mouse state
+    this.wasmSimulation.setMouseState(
+      this.mouseX,
+      this.mouseY,
+      mouseEnabled && this.mouseInCanvas,
+      mouseRadius,
+      heightInfluence
+    );
 
-      // Wrap around edges
-      if (point.x < 0) point.x += width;
-      if (point.x > width) point.x -= width;
-      if (point.y < 0) point.y += height;
-      if (point.y > height) point.y -= height;
+    // Update points in WASM
+    this.wasmSimulation.update_points(
+      deltaTime,
+      this.options.speed,
+      this.currentTime,
+      heightMode === 'animate'
+    );
 
-      // Update height based on mode
-      if (heightMode === 'animate') {
-        point.baseZ = this.calculateBaseHeight(point.x, point.y, width, height, time);
-      } else if (heightMode === 'static' && point.baseZ === undefined) {
-        point.baseZ = this.calculateBaseHeight(point.x, point.y, width, height, 0);
-      }
-
-      // Start with base height
-      point.z = point.baseZ * heightIntensity;
-
-      // Apply mouse influence
-      if (mouseEnabled && this.mouseInCanvas) {
-        const dx = point.x - this.mouseX;
-        const dy = point.y - this.mouseY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < mouseRadius) {
-          const influence = 1 - dist / mouseRadius;
-          // Smooth falloff
-          const smoothInfluence = smoothstep(influence);
-          point.z += smoothInfluence * heightInfluence;
-        }
-      }
-
-      // Clamp z to [0, 1]
-      point.z = clamp01(point.z);
-    }
+    // Triangulate
+    this.wasmSimulation.triangulate();
   }
 
   /**
@@ -475,25 +376,15 @@ export class PolygonBackground {
    * Render the current frame
    */
   private render(): void {
-    const rect = this.container.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
+    if (!this.wasmSimulation) return;
+
+    // Use cached dimensions to avoid layout thrashing
+    const width = this.cachedWidth;
+    const height = this.cachedHeight;
+
+    if (width === 0 || height === 0) return;
 
     const theme = this.getEffectiveTheme();
-
-    // Clear canvas with background color (use options for user-adjustable value)
-    this.ctx.fillStyle = this.options.backgroundColor;
-    this.ctx.fillRect(0, 0, width, height);
-
-    // Skip rendering if no points
-    if (this.points.length < 3) return;
-
-    // Perform triangulation with ghost points
-    const { triangles, allPoints } = triangulate(
-      this.points,
-      width,
-      height
-    );
 
     // Calculate light position
     let lightX: number, lightY: number;
@@ -501,79 +392,33 @@ export class PolygonBackground {
       lightX = this.mouseX;
       lightY = this.mouseY;
     } else {
-      // Use options.light.position (updated by sliders) not theme.lightPosition
       lightX = this.options.light.position.x * width;
       lightY = this.options.light.position.y * height;
     }
 
-    // Parse theme colors
-    const gradientStart = parseColorToRGB(theme.gradientStart);
-    const gradientEnd = parseColorToRGB(theme.gradientEnd);
-    const lightColor = parseColorToRGB(theme.lightColor);
-    const shadowColor = parseColorToRGB(theme.shadowColor);
+    // Get vertex data from WASM (already triangulated in updateWasm)
+    const wasmRenderData: RenderData = {
+      triangleVertices: this.wasmSimulation.get_triangle_vertices(),
+      strokeVertices: this.wasmSimulation.get_stroke_vertices(),
+      pointVertices: this.wasmSimulation.get_point_vertices(),
+      triangleCount: this.wasmSimulation.get_triangle_count(),
+      strokeVertexCount: this.wasmSimulation.get_stroke_vertex_count(),
+      pointCount: this.wasmSimulation.get_point_count(),
+      width,
+      height,
+      lightX,
+      lightY,
+      theme,
+      // Pass user-adjustable options
+      strokeWidth: this.options.strokeWidth,
+      pointSize: this.options.pointSize,
+      fillOpacity: this.options.fillOpacity,
+      strokeColor: this.options.strokeColor,
+      pointColor: this.options.pointColor,
+      backgroundColor: this.options.backgroundColor,
+    };
 
-    // Draw triangles - use options for user-adjustable values, theme for colors
-    this.ctx.lineWidth = this.options.strokeWidth;
-    this.ctx.strokeStyle = this.options.strokeColor;
-
-    for (let i = 0; i < triangles.length; i += 3) {
-      const i0 = triangles[i];
-      const i1 = triangles[i + 1];
-      const i2 = triangles[i + 2];
-
-      const p0 = allPoints[i0];
-      const p1 = allPoints[i1];
-      const p2 = allPoints[i2];
-
-      // Calculate triangle centroid for gradient
-      const centroidY = (p0.y + p1.y + p2.y) / 3;
-      const gradientT = centroidY / height;
-
-      // Get base color from gradient
-      const baseColor = interpolateGradient(gradientStart, gradientEnd, gradientT);
-
-      // Calculate lighting
-      const lighting = calculateTriangleLighting(
-        p0, p1, p2,
-        lightX, lightY,
-        theme.ambientLight,
-        theme.shadowIntensity,
-        theme.highlightIntensity
-      );
-
-      // Apply lighting to base color
-      const fillColor = applyLighting(
-        baseColor,
-        lightColor,
-        shadowColor,
-        lighting,
-        this.options.fillOpacity
-      );
-
-      // Draw triangle
-      this.ctx.beginPath();
-      this.ctx.moveTo(p0.x, p0.y);
-      this.ctx.lineTo(p1.x, p1.y);
-      this.ctx.lineTo(p2.x, p2.y);
-      this.ctx.closePath();
-
-      this.ctx.fillStyle = fillColor;
-      this.ctx.fill();
-
-      if (this.options.strokeWidth > 0) {
-        this.ctx.stroke();
-      }
-    }
-
-    // Draw points (only real points, not ghosts)
-    if (this.options.pointSize > 0) {
-      this.ctx.fillStyle = this.options.pointColor;
-      for (const point of this.points) {
-        this.ctx.beginPath();
-        this.ctx.arc(point.x, point.y, this.options.pointSize, 0, TWO_PI);
-        this.ctx.fill();
-      }
-    }
+    this.renderer.render(wasmRenderData);
   }
 
   /**
@@ -632,7 +477,7 @@ export class PolygonBackground {
       const deltaTime = rawDeltaTime / this.TARGET_FRAME_TIME;
       this.lastUpdateTime = now;
 
-      this.updatePoints(deltaTime);
+      this.updateWasm(deltaTime);
     }
 
     this.render();
@@ -646,13 +491,31 @@ export class PolygonBackground {
   };
 
   /**
-   * Render FPS counter
+   * Render FPS counter using HTML overlay
    */
   private renderFPS(): void {
-    const text = `${this.fps} FPS`;
-    this.ctx.font = '12px monospace';
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    this.ctx.fillText(text, 10, 20);
+    if (!this.fpsElement) {
+      this.fpsElement = document.createElement('div');
+      this.fpsElement.style.position = 'absolute';
+      this.fpsElement.style.top = '10px';
+      this.fpsElement.style.left = '10px';
+      this.fpsElement.style.color = 'rgba(255, 255, 255, 0.7)';
+      this.fpsElement.style.font = '12px monospace';
+      this.fpsElement.style.pointerEvents = 'none';
+      this.fpsElement.style.zIndex = '1';
+      this.container.appendChild(this.fpsElement);
+    }
+    this.fpsElement.textContent = `${this.fps} FPS`;
+  }
+
+  /**
+   * Remove FPS counter element
+   */
+  private removeFPSElement(): void {
+    if (this.fpsElement && this.fpsElement.parentNode) {
+      this.fpsElement.parentNode.removeChild(this.fpsElement);
+      this.fpsElement = null;
+    }
   }
 
   /**
@@ -706,6 +569,16 @@ export class PolygonBackground {
     }
 
     this.removeMouseListeners();
+    this.removeFPSElement();
+
+    // Dispose WASM simulation
+    if (this.wasmSimulation) {
+      this.wasmSimulation.dispose();
+      this.wasmSimulation = null;
+    }
+
+    // Dispose WebGL resources
+    this.renderer.dispose();
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
@@ -806,6 +679,16 @@ export class PolygonBackground {
    */
   setHeightConfig(config: Partial<HeightConfig>): void {
     this.options.height = { ...this.options.height, ...config };
+
+    // Update WASM simulation
+    if (this.wasmSimulation) {
+      this.wasmSimulation.setNoiseParams(
+        this.options.height.noiseScale,
+        this.options.height.animationSpeed,
+        this.options.height.centerFalloff,
+        this.options.height.intensity
+      );
+    }
   }
 
   /**
