@@ -1,0 +1,242 @@
+/**
+ * A point with position, velocity, and height
+ */
+export interface Point {
+  x: number;
+  y: number;
+  /** Z-height for 3D effect (0-1 normalized) */
+  z: number;
+  vx: number;
+  vy: number;
+  /** Base height from noise (before mouse influence) */
+  baseZ: number;
+}
+
+/**
+ * A ghost point used for edge wrapping continuity
+ */
+export interface GhostPoint {
+  x: number;
+  y: number;
+  z: number;
+  /** Index of the source point this ghost was created from */
+  sourceIndex: number;
+}
+
+/**
+ * Light source configuration
+ */
+export interface LightConfig {
+  /** Light position mode */
+  mode: 'fixed' | 'mouse';
+  /** Fixed position (normalized 0-1) - used when mode is 'fixed' */
+  position: { x: number; y: number };
+  /** Light color */
+  color: string;
+  /** Light intensity (0-1) */
+  intensity: number;
+}
+
+/**
+ * Mouse interaction configuration
+ */
+export interface MouseConfig {
+  /** Enable mouse interaction */
+  enabled: boolean;
+  /** Mouse influence radius in pixels or percentage */
+  radius: number;
+  /** Whether radius is in pixels ('px') or percentage ('percent') */
+  radiusUnit: 'px' | 'percent';
+  /** Height influence: positive = rise toward cursor, negative = push away */
+  heightInfluence: number;
+}
+
+/**
+ * Height/topography configuration
+ */
+export interface HeightConfig {
+  /** Height animation mode */
+  mode: 'static' | 'animate' | 'mouse';
+  /** Noise scale - larger = bigger features */
+  noiseScale: number;
+  /** Height intensity (0-1) - how much height affects shading */
+  intensity: number;
+  /** Animation speed (when mode is 'animate') */
+  animationSpeed: number;
+  /** Distance falloff from center (0 = none, 1 = strong) */
+  centerFalloff: number;
+}
+
+/**
+ * Theme transition configuration
+ */
+export interface TransitionConfig {
+  /** Enable smooth transitions between themes */
+  enabled: boolean;
+  /** Transition duration in milliseconds */
+  duration: number;
+}
+
+/**
+ * Performance configuration
+ */
+export interface PerformanceConfig {
+  /** Target frames per second (0 = unlimited). Default: 0 */
+  targetFPS: number;
+  /** Show FPS counter for debugging. Default: false */
+  showFPS: boolean;
+}
+
+/**
+ * Configuration options for PolygonBackground
+ */
+export interface PolygonBackgroundOptions {
+  // Points
+  /** Number of points to render. Default: 80 */
+  pointCount?: number;
+  /** Radius of point dots in pixels. Default from theme */
+  pointSize?: number;
+  /** Color of point dots. Default from theme */
+  pointColor?: string;
+
+  // Movement
+  /** Velocity multiplier. Higher = faster. Default: 1 */
+  speed?: number;
+
+  // Triangles
+  /** Opacity of triangle fills (0-1). Default from theme */
+  fillOpacity?: number;
+  /** Width of triangle borders in pixels. Default from theme */
+  strokeWidth?: number;
+  /** Color of triangle borders. Default from theme */
+  strokeColor?: string;
+
+  // Canvas
+  /** Background color of the canvas. Default from theme */
+  backgroundColor?: string;
+
+  // Behavior
+  /** Automatically resize canvas on window resize. Default: true */
+  responsive?: boolean;
+  /** Scale point count based on canvas size. Default: false */
+  scalePointsWithSize?: boolean;
+  /** Points per 10000 square pixels when scaling. Default: 0.005 */
+  pointsPerPixel?: number;
+
+  // Theme
+  /** Theme name or custom theme definition */
+  theme?: string;
+
+  // Lighting
+  /** Light configuration */
+  light?: Partial<LightConfig>;
+
+  // Mouse interaction
+  /** Mouse interaction configuration */
+  mouse?: Partial<MouseConfig>;
+
+  // Height/topography
+  /** Height map configuration */
+  height?: Partial<HeightConfig>;
+
+  // Transitions
+  /** Theme transition configuration */
+  transition?: Partial<TransitionConfig>;
+
+  // Performance
+  /** Performance configuration */
+  performance?: Partial<PerformanceConfig>;
+}
+
+/**
+ * Internal resolved options with all defaults applied
+ */
+export interface ResolvedOptions {
+  pointCount: number;
+  pointSize: number;
+  pointColor: string;
+  speed: number;
+  fillOpacity: number;
+  strokeWidth: number;
+  strokeColor: string;
+  backgroundColor: string;
+  responsive: boolean;
+  scalePointsWithSize: boolean;
+  pointsPerPixel: number;
+  theme: string;
+  light: LightConfig;
+  mouse: MouseConfig;
+  height: HeightConfig;
+  transition: TransitionConfig;
+  performance: PerformanceConfig;
+}
+
+/**
+ * Default light configuration
+ */
+export const DEFAULT_LIGHT: LightConfig = {
+  mode: 'fixed',
+  position: { x: 0.3, y: 0.2 },
+  color: '#ffffff',
+  intensity: 1,
+};
+
+/**
+ * Default mouse configuration
+ */
+export const DEFAULT_MOUSE: MouseConfig = {
+  enabled: false,
+  radius: 150,
+  radiusUnit: 'px',
+  heightInfluence: 0.5,
+};
+
+/**
+ * Default height configuration
+ */
+export const DEFAULT_HEIGHT: HeightConfig = {
+  mode: 'animate',
+  noiseScale: 0.003,
+  intensity: 0.6,
+  animationSpeed: 0.00002,
+  centerFalloff: 0.3,
+};
+
+/**
+ * Default transition configuration
+ */
+export const DEFAULT_TRANSITION: TransitionConfig = {
+  enabled: true,
+  duration: 1000,
+};
+
+/**
+ * Default performance configuration
+ */
+export const DEFAULT_PERFORMANCE: PerformanceConfig = {
+  targetFPS: 0,
+  showFPS: false,
+};
+
+/**
+ * Default configuration values
+ */
+export const DEFAULT_OPTIONS: ResolvedOptions = {
+  pointCount: 80,
+  pointSize: 1.5,
+  pointColor: '#ffffff',
+  speed: 1,
+  fillOpacity: 0.85,
+  strokeWidth: 0.5,
+  strokeColor: 'rgba(255, 255, 255, 0.2)',
+  backgroundColor: '#0d0d1a',
+  responsive: true,
+  scalePointsWithSize: false,
+  pointsPerPixel: 0.005,
+  theme: 'midnight',
+  light: { ...DEFAULT_LIGHT },
+  mouse: { ...DEFAULT_MOUSE },
+  height: { ...DEFAULT_HEIGHT },
+  transition: { ...DEFAULT_TRANSITION },
+  performance: { ...DEFAULT_PERFORMANCE },
+};

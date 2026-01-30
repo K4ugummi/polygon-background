@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Polygon Background - Test Page</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #background-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+    }
+
+    /* Menu toggle button */
+    .menu-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 44px;
+      height: 44px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1001;
+      transition: background 0.2s;
+    }
+
+    .menu-toggle:hover {
+      background: rgba(0, 0, 0, 0.9);
+    }
+
+    .menu-toggle svg {
+      width: 24px;
+      height: 24px;
+      fill: white;
+    }
+
+    .menu-toggle.active .icon-menu { display: none; }
+    .menu-toggle.active .icon-close { display: block; }
+    .menu-toggle:not(.active) .icon-menu { display: block; }
+    .menu-toggle:not(.active) .icon-close { display: none; }
+
+    /* Controls panel */
+    .controls {
+      position: fixed;
+      top: 20px;
+      right: 74px;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      color: white;
+      width: 320px;
+      max-height: calc(100vh - 40px);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+      transform: translateX(calc(100% + 74px));
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .controls.open {
+      transform: translateX(0);
+      opacity: 1;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 12px 8px;
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .tab:hover {
+      color: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab.active {
+      color: white;
+      background: rgba(255, 255, 255, 0.1);
+      border-bottom: 2px solid #6366f1;
+    }
+
+    /* Tab content */
+    .tab-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Control groups */
+    .control-group {
+      margin-bottom: 16px;
+    }
+
+    .control-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: 500;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .control-row input[type="range"] {
+      flex: 1;
+    }
+
+    .control-value {
+      min-width: 45px;
+      text-align: right;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      font-family: monospace;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #6366f1;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    input[type="color"] {
+      width: 100%;
+      height: 32px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: none;
+      border-radius: 4px;
+    }
+
+    /* Select */
+    select {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    select option {
+      background: #1a1a2e;
+      color: white;
+    }
+
+    /* Checkbox toggle */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle.active {
+      background: #6366f1;
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle.active::after {
+      transform: translateX(20px);
+    }
+
+    /* Buttons */
+    .button-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    button.btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    button.btn-primary {
+      background: #6366f1;
+      color: white;
+    }
+
+    button.btn-primary:hover {
+      background: #5558e3;
+    }
+
+    button.btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    button.btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Theme buttons */
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .theme-btn {
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: white;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .theme-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .theme-btn.active {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: #6366f1;
+    }
+
+    .theme-preview {
+      width: 100%;
+      height: 24px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+
+    /* Section headers */
+    .section-header {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.4);
+      margin: 20px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .section-header:first-child {
+      margin-top: 0;
+    }
+
+    /* Content area */
+    .content {
+      position: relative;
+      z-index: 1;
+      padding: 40px;
+      max-width: 600px;
+    }
+
+    .content h1 {
+      color: white;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+      margin-bottom: 20px;
+      font-size: 2.5rem;
+      font-weight: 600;
+    }
+
+    .content p {
+      color: rgba(255, 255, 255, 0.85);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      line-height: 1.7;
+      font-size: 1.1rem;
+    }
+
+    /* Scrollbar */
+    .tab-content::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .tab-content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .tab-content::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+
+    .tab-content::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div id="background-container"></div>
+
+  <div class="content">
+    <h1>Polygon Background</h1>
+    <p>
+      An animated low-poly background with 3D lighting and topography.
+      Click the menu icon to adjust settings, change themes, and experiment with the visualization.
+    </p>
+  </div>
+
+  <!-- Menu toggle button -->
+  <button class="menu-toggle" id="menuToggle" aria-label="Toggle controls">
+    <svg class="icon-menu" viewBox="0 0 24 24">
+      <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+    </svg>
+    <svg class="icon-close" viewBox="0 0 24 24">
+      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+    </svg>
+  </button>
+
+  <!-- Controls panel -->
+  <div class="controls" id="controls">
+    <div class="tabs">
+      <button class="tab active" data-tab="theme">Theme</button>
+      <button class="tab" data-tab="points">Points</button>
+      <button class="tab" data-tab="lighting">Light</button>
+      <button class="tab" data-tab="height">Height</button>
+      <button class="tab" data-tab="perf">Perf</button>
+    </div>
+
+    <div class="tab-content">
+      <!-- Theme Tab -->
+      <div class="tab-panel active" id="tab-theme">
+        <div class="section-header">Presets</div>
+        <div class="theme-grid" id="themeGrid">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="section-header">Transition</div>
+        <div class="control-group">
+          <div class="toggle-row">
+            <label>Smooth Transitions</label>
+            <div class="toggle active" id="transitionEnabled"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Duration</label>
+          <div class="control-row">
+            <input type="range" id="transitionDuration" min="100" max="3000" step="100" value="1000">
+            <span class="control-value" id="transitionDurationValue">1000ms</span>
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button class="btn btn-primary" id="pauseBtn">Pause</button>
+          <button class="btn btn-secondary" id="resetBtn">Reset</button>
+        </div>
+      </div>
+
+      <!-- Points Tab -->
+      <div class="tab-panel" id="tab-points">
+        <div class="section-header">Points</div>
+        <div class="control-group">
+          <label>Count</label>
+          <div class="control-row">
+            <input type="range" id="pointCount" min="20" max="200" value="80">
+            <span class="control-value" id="pointCountValue">80</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Size</label>
+          <div class="control-row">
+            <input type="range" id="pointSize" min="0" max="5" step="0.5" value="1.5">
+            <span class="control-value" id="pointSizeValue">1.5</span>
+          </div>
+        </div>
+
+        <div class="section-header">Movement</div>
+        <div class="control-group">
+          <label>Speed</label>
+          <div class="control-row">
+            <input type="range" id="speed" min="0" max="5" step="0.1" value="1">
+            <span class="control-value" id="speedValue">1.0</span>
+          </div>
+        </div>
+
+        <div class="section-header">Triangles</div>
+        <div class="control-group">
+          <label>Fill Opacity</label>
+          <div class="control-row">
+            <input type="range" id="fillOpacity" min="0" max="1" step="0.05" value="0.85">
+            <span class="control-value" id="fillOpacityValue">0.85</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Stroke Width</label>
+          <div class="control-row">
+            <input type="range" id="strokeWidth" min="0" max="3" step="0.1" value="0.5">
+            <span class="control-value" id="strokeWidthValue">0.5</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lighting Tab -->
+      <div class="tab-panel" id="tab-lighting">
+        <div class="section-header">Light Source</div>
+        <div class="control-group">
+          <label>Mode</label>
+          <select id="lightMode">
+            <option value="fixed">Fixed Position</option>
+            <option value="mouse">Follow Mouse</option>
+          </select>
+        </div>
+        <div class="control-group" id="lightPositionGroup">
+          <label>Position X</label>
+          <div class="control-row">
+            <input type="range" id="lightX" min="0" max="1" step="0.05" value="0.3">
+            <span class="control-value" id="lightXValue">0.30</span>
+          </div>
+        </div>
+        <div class="control-group" id="lightPositionGroupY">
+          <label>Position Y</label>
+          <div class="control-row">
+            <input type="range" id="lightY" min="0" max="1" step="0.05" value="0.2">
+            <span class="control-value" id="lightYValue">0.20</span>
+          </div>
+        </div>
+
+        <div class="section-header">Intensity</div>
+        <div class="control-group">
+          <label>Ambient Light</label>
+          <div class="control-row">
+            <input type="range" id="ambientLight" min="0" max="0.5" step="0.02" value="0.2">
+            <span class="control-value" id="ambientLightValue">0.20</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Shadow Intensity</label>
+          <div class="control-row">
+            <input type="range" id="shadowIntensity" min="0" max="1" step="0.05" value="0.7">
+            <span class="control-value" id="shadowIntensityValue">0.70</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Highlight Intensity</label>
+          <div class="control-row">
+            <input type="range" id="highlightIntensity" min="0" max="1" step="0.05" value="0.5">
+            <span class="control-value" id="highlightIntensityValue">0.50</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Height Tab -->
+      <div class="tab-panel" id="tab-height">
+        <div class="section-header">Topography</div>
+        <div class="control-group">
+          <label>Animation Mode</label>
+          <select id="heightMode">
+            <option value="animate">Animated</option>
+            <option value="static">Static</option>
+            <option value="mouse">Mouse Only</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>Height Intensity</label>
+          <div class="control-row">
+            <input type="range" id="heightIntensity" min="0" max="1" step="0.05" value="0.6">
+            <span class="control-value" id="heightIntensityValue">0.60</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Noise Scale</label>
+          <div class="control-row">
+            <input type="range" id="noiseScale" min="0.001" max="0.01" step="0.001" value="0.003">
+            <span class="control-value" id="noiseScaleValue">0.003</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Animation Speed</label>
+          <div class="control-row">
+            <input type="range" id="animationSpeed" min="0.000005" max="0.0001" step="0.000005" value="0.00002">
+            <span class="control-value" id="animationSpeedValue">0.00002</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Center Falloff</label>
+          <div class="control-row">
+            <input type="range" id="centerFalloff" min="0" max="1" step="0.05" value="0.3">
+            <span class="control-value" id="centerFalloffValue">0.30</span>
+          </div>
+        </div>
+
+        <div class="section-header">Mouse Interaction</div>
+        <div class="control-group">
+          <div class="toggle-row">
+            <label>Enable Mouse Effect</label>
+            <div class="toggle" id="mouseEnabled"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Radius (px)</label>
+          <div class="control-row">
+            <input type="range" id="mouseRadius" min="50" max="400" value="150">
+            <span class="control-value" id="mouseRadiusValue">150px</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Height Influence</label>
+          <div class="control-row">
+            <input type="range" id="mouseInfluence" min="-1" max="1" step="0.1" value="0.5">
+            <span class="control-value" id="mouseInfluenceValue">0.50</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Tab -->
+      <div class="tab-panel" id="tab-perf">
+        <div class="section-header">Frame Rate</div>
+        <div class="control-group">
+          <div class="toggle-row">
+            <label>Show FPS Counter</label>
+            <div class="toggle" id="showFPS"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Target FPS (0 = unlimited)</label>
+          <div class="control-row">
+            <input type="range" id="targetFPS" min="0" max="60" step="1" value="0">
+            <span class="control-value" id="targetFPSValue">0</span>
+          </div>
+        </div>
+
+        <div class="section-header">Stats</div>
+        <div class="control-group">
+          <label>Current FPS</label>
+          <div class="control-value" id="currentFPS" style="text-align: left; font-size: 14px;">--</div>
+        </div>
+        <div class="control-group">
+          <label>Points</label>
+          <div class="control-value" id="currentPoints" style="text-align: left; font-size: 14px;">--</div>
+        </div>
+        <div class="control-group">
+          <label>Triangles</label>
+          <div class="control-value" id="currentTriangles" style="text-align: left; font-size: 14px;">--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { PolygonBackground, getThemeNames, THEMES } from '../index.ts';
+
+    // Initialize the background
+    const container = document.getElementById('background-container');
+    let bg = new PolygonBackground(container, {
+      theme: 'midnight',
+      height: { mode: 'animate' }
+    });
+
+    // Menu toggle
+    const menuToggle = document.getElementById('menuToggle');
+    const controls = document.getElementById('controls');
+
+    menuToggle.addEventListener('click', () => {
+      menuToggle.classList.toggle('active');
+      controls.classList.toggle('open');
+    });
+
+    // Tab switching
+    const tabs = document.querySelectorAll('.tab');
+    const panels = document.querySelectorAll('.tab-panel');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const targetId = tab.dataset.tab;
+
+        tabs.forEach(t => t.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
+
+        tab.classList.add('active');
+        document.getElementById(`tab-${targetId}`).classList.add('active');
+      });
+    });
+
+    // Populate theme grid
+    const themeGrid = document.getElementById('themeGrid');
+    const themeNames = getThemeNames();
+    let activeTheme = 'midnight';
+
+    themeNames.forEach(name => {
+      const theme = THEMES[name];
+      const btn = document.createElement('button');
+      btn.className = `theme-btn${name === activeTheme ? ' active' : ''}`;
+      btn.innerHTML = `
+        <div class="theme-preview" style="background: linear-gradient(135deg, ${theme.gradientStart}, ${theme.gradientEnd})"></div>
+        ${theme.name}
+      `;
+      btn.addEventListener('click', () => {
+        bg.setTheme(name);
+        activeTheme = name;
+        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+      themeGrid.appendChild(btn);
+    });
+
+    // Helper functions
+    function updateValue(id, value, suffix = '') {
+      const el = document.getElementById(id + 'Value');
+      if (el) {
+        if (typeof value === 'number') {
+          el.textContent = (Number.isInteger(value) ? value : value.toFixed(2)) + suffix;
+        } else {
+          el.textContent = value + suffix;
+        }
+      }
+    }
+
+    function setupToggle(id, initialState, callback) {
+      const toggle = document.getElementById(id);
+      if (initialState) toggle.classList.add('active');
+      else toggle.classList.remove('active');
+
+      toggle.addEventListener('click', () => {
+        toggle.classList.toggle('active');
+        callback(toggle.classList.contains('active'));
+      });
+    }
+
+    // Points controls
+    document.getElementById('pointCount').addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      bg.setOption('pointCount', value);
+      updateValue('pointCount', value);
+    });
+
+    document.getElementById('pointSize').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setOption('pointSize', value);
+      updateValue('pointSize', value);
+    });
+
+    document.getElementById('speed').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setOption('speed', value);
+      updateValue('speed', value);
+    });
+
+    document.getElementById('fillOpacity').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setOption('fillOpacity', value);
+      updateValue('fillOpacity', value);
+    });
+
+    document.getElementById('strokeWidth').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setOption('strokeWidth', value);
+      updateValue('strokeWidth', value);
+    });
+
+    // Lighting controls
+    const lightPositionGroup = document.getElementById('lightPositionGroup');
+    const lightPositionGroupY = document.getElementById('lightPositionGroupY');
+
+    document.getElementById('lightMode').addEventListener('change', (e) => {
+      const mode = e.target.value;
+      bg.setLightConfig({ mode });
+
+      const show = mode === 'fixed';
+      lightPositionGroup.style.display = show ? 'block' : 'none';
+      lightPositionGroupY.style.display = show ? 'block' : 'none';
+    });
+
+    document.getElementById('lightX').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      const current = bg.getOption('light');
+      bg.setLightConfig({ position: { ...current.position, x: value } });
+      updateValue('lightX', value);
+    });
+
+    document.getElementById('lightY').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      const current = bg.getOption('light');
+      bg.setLightConfig({ position: { ...current.position, y: value } });
+      updateValue('lightY', value);
+    });
+
+    document.getElementById('ambientLight').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      // Note: ambientLight is a theme property, would need custom theme support
+      updateValue('ambientLight', value);
+    });
+
+    document.getElementById('shadowIntensity').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      updateValue('shadowIntensity', value);
+    });
+
+    document.getElementById('highlightIntensity').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      updateValue('highlightIntensity', value);
+    });
+
+    // Height controls
+    document.getElementById('heightMode').addEventListener('change', (e) => {
+      bg.setHeightConfig({ mode: e.target.value });
+    });
+
+    document.getElementById('heightIntensity').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setHeightConfig({ intensity: value });
+      updateValue('heightIntensity', value);
+    });
+
+    document.getElementById('noiseScale').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setHeightConfig({ noiseScale: value });
+      updateValue('noiseScale', value);
+    });
+
+    document.getElementById('animationSpeed').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setHeightConfig({ animationSpeed: value });
+      updateValue('animationSpeed', value);
+    });
+
+    document.getElementById('centerFalloff').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setHeightConfig({ centerFalloff: value });
+      updateValue('centerFalloff', value);
+    });
+
+    // Mouse controls
+    setupToggle('mouseEnabled', false, (enabled) => {
+      bg.setMouseConfig({ enabled });
+    });
+
+    document.getElementById('mouseRadius').addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      bg.setMouseConfig({ radius: value });
+      updateValue('mouseRadius', value, 'px');
+    });
+
+    document.getElementById('mouseInfluence').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setMouseConfig({ heightInfluence: value });
+      updateValue('mouseInfluence', value);
+    });
+
+    // Transition controls
+    setupToggle('transitionEnabled', true, (enabled) => {
+      bg.setTransitionConfig({ enabled });
+    });
+
+    document.getElementById('transitionDuration').addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      bg.setTransitionConfig({ duration: value });
+      updateValue('transitionDuration', value, 'ms');
+    });
+
+    // Performance controls
+    setupToggle('showFPS', false, (enabled) => {
+      bg.setPerformanceConfig({ showFPS: enabled });
+    });
+
+    document.getElementById('targetFPS').addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      bg.setPerformanceConfig({ targetFPS: value });
+      updateValue('targetFPS', value);
+    });
+
+    // Stats update loop
+    setInterval(() => {
+      document.getElementById('currentFPS').textContent = bg.getFPS();
+      document.getElementById('currentPoints').textContent = bg.getOption('pointCount');
+      // Approximate triangle count (Delaunay creates ~2n triangles for n points)
+      const pointCount = bg.getOption('pointCount');
+      document.getElementById('currentTriangles').textContent = '~' + (pointCount * 2);
+    }, 500);
+
+    // Pause/Resume
+    const pauseBtn = document.getElementById('pauseBtn');
+    pauseBtn.addEventListener('click', () => {
+      if (bg.isPaused()) {
+        bg.resume();
+        pauseBtn.textContent = 'Pause';
+      } else {
+        bg.pause();
+        pauseBtn.textContent = 'Resume';
+      }
+    });
+
+    // Reset
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      bg.destroy();
+      bg = new PolygonBackground(container, {
+        theme: activeTheme,
+        height: { mode: 'animate' }
+      });
+      pauseBtn.textContent = 'Pause';
+
+      // Reset controls to defaults
+      document.getElementById('pointCount').value = 80;
+      document.getElementById('pointSize').value = 1.5;
+      document.getElementById('speed').value = 1;
+      document.getElementById('fillOpacity').value = 0.85;
+      document.getElementById('strokeWidth').value = 0.5;
+      document.getElementById('lightMode').value = 'fixed';
+      document.getElementById('lightX').value = 0.3;
+      document.getElementById('lightY').value = 0.2;
+      document.getElementById('heightMode').value = 'animate';
+      document.getElementById('heightIntensity').value = 0.6;
+      document.getElementById('noiseScale').value = 0.003;
+      document.getElementById('animationSpeed').value = 0.00002;
+      document.getElementById('centerFalloff').value = 0.3;
+      document.getElementById('mouseRadius').value = 150;
+      document.getElementById('mouseInfluence').value = 0.5;
+
+      // Reset value displays
+      updateValue('pointCount', 80);
+      updateValue('pointSize', 1.5);
+      updateValue('speed', 1.0);
+      updateValue('fillOpacity', 0.85);
+      updateValue('strokeWidth', 0.5);
+      updateValue('lightX', 0.30);
+      updateValue('lightY', 0.20);
+      updateValue('heightIntensity', 0.60);
+      updateValue('noiseScale', 0.003);
+      updateValue('animationSpeed', 0.00002);
+      updateValue('centerFalloff', 0.30);
+      updateValue('mouseRadius', 150, 'px');
+      updateValue('mouseInfluence', 0.50);
+
+      // Reset toggles
+      document.getElementById('mouseEnabled').classList.remove('active');
+      document.getElementById('transitionEnabled').classList.add('active');
+      document.getElementById('showFPS').classList.remove('active');
+
+      // Reset performance controls
+      document.getElementById('targetFPS').value = 0;
+      updateValue('targetFPS', 0);
+
+      // Show light position controls
+      lightPositionGroup.style.display = 'block';
+      lightPositionGroupY.style.display = 'block';
+    });
+  </script>
+</body>
+</html>
