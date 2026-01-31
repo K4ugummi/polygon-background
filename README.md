@@ -22,28 +22,99 @@ npm install polygon-background
 
 ## Quick Start
 
-```typescript
-import { PolygonBackground } from 'polygon-background';
+```html
+<div id="background" style="width: 100%; height: 100vh;"></div>
 
-const container = document.getElementById('background');
-const bg = new PolygonBackground(container, {
-  theme: 'midnight',
-  pointCount: 80,
-});
+<script type="module">
+  import { PolygonBackground } from 'polygon-background';
+
+  const bg = new PolygonBackground(document.getElementById('background'), {
+    theme: 'midnight',
+    pointCount: 80,
+  });
+</script>
 ```
 
-## Usage with Frameworks
+## Framework Examples
 
-See the `examples/` directory for complete framework examples:
+### React
 
-- **React** - `examples/react/`
-- **Vue** - `examples/vue/`
-- **Angular** - `examples/angular/`
+```tsx
+import { useRef, useEffect } from 'react';
+import { PolygonBackground } from 'polygon-background';
 
-Each example includes:
-- Home page with theme switching
-- Interactive page demonstrating mouse physics
-- Themes page showcasing all available themes
+function App() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const bg = new PolygonBackground(containerRef.current, {
+      theme: 'midnight',
+      pointCount: 80,
+    });
+    return () => bg.destroy();
+  }, []);
+
+  return <div ref={containerRef} style={{ width: '100%', height: '100vh' }} />;
+}
+```
+
+### Vue
+
+```vue
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+import { PolygonBackground } from 'polygon-background';
+
+const containerRef = ref<HTMLDivElement>();
+let bg: PolygonBackground | null = null;
+
+onMounted(() => {
+  if (containerRef.value) {
+    bg = new PolygonBackground(containerRef.value, {
+      theme: 'midnight',
+      pointCount: 80,
+    });
+  }
+});
+
+onUnmounted(() => bg?.destroy());
+</script>
+
+<template>
+  <div ref="containerRef" style="width: 100%; height: 100vh" />
+</template>
+```
+
+### Angular
+
+```typescript
+import { Component, ElementRef, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
+import { PolygonBackground } from 'polygon-background';
+
+@Component({
+  selector: 'app-background',
+  standalone: true,
+  template: `<div #container style="width: 100%; height: 100vh"></div>`,
+})
+export class BackgroundComponent implements AfterViewInit, OnDestroy {
+  @ViewChild('container') containerRef!: ElementRef<HTMLDivElement>;
+  private bg: PolygonBackground | null = null;
+
+  ngAfterViewInit() {
+    this.bg = new PolygonBackground(this.containerRef.nativeElement, {
+      theme: 'midnight',
+      pointCount: 80,
+    });
+  }
+
+  ngOnDestroy() {
+    this.bg?.destroy();
+  }
+}
+```
+
+See `examples/` for complete working demos with theme switching and interactive physics
 
 ## Configuration
 

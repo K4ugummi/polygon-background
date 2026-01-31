@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import App from './App.vue';
 import HomePage from './pages/HomePage.vue';
 import InteractivePage from './pages/InteractivePage.vue';
-import ThemesPage from './pages/ThemesPage.vue';
+import ComponentsPage from './pages/ComponentsPage.vue';
 import './index.css';
 
 const router = createRouter({
@@ -11,7 +11,7 @@ const router = createRouter({
   routes: [
     { path: '/', component: HomePage },
     { path: '/interactive', component: InteractivePage },
-    { path: '/themes', component: ThemesPage },
+    { path: '/components', component: ComponentsPage },
   ],
 });
 

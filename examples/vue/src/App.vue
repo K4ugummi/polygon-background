@@ -4,7 +4,7 @@ import { RouterLink, RouterView, useRoute } from 'vue-router';
 const navItems = [
   { path: '/', label: 'Home' },
   { path: '/interactive', label: 'Interactive' },
-  { path: '/themes', label: 'Themes' },
+  { path: '/components', label: 'Components' },
 ];
 
 const route = useRoute();

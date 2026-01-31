@@ -14,6 +14,7 @@ onMounted(() => {
       theme: 'ocean',
       pointCount: 100,
       mouse: { enabled: true, mode: 'push', strength: 80 },
+      interaction: { clickShockwave: true, holdGravityWell: true },
     });
   }
 });

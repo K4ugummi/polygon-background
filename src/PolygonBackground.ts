@@ -84,6 +84,9 @@ export class PolygonBackground {
   private cachedWidth: number = 0;
   private cachedHeight: number = 0;
 
+  // Track if instance has been destroyed
+  private destroyed: boolean = false;
+
   constructor(container: HTMLElement, options?: PolygonBackgroundOptions) {
     this.container = container;
 
@@ -101,7 +104,7 @@ export class PolygonBackground {
     this.canvas.style.left = '0';
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
-    this.canvas.style.zIndex = '-1';
+    this.canvas.style.zIndex = '0';
     this.canvas.style.pointerEvents = 'none';
 
     // Create WebGL renderer
@@ -137,9 +140,11 @@ export class PolygonBackground {
     // Initialize time
     this.startTime = performance.now();
 
-    // Initialize WASM, then start
+    // Initialize WASM, then start (unless already destroyed)
     this.initializeWasm().then(() => {
-      this.start();
+      if (!this.destroyed) {
+        this.start();
+      }
     });
   }
 
@@ -152,10 +157,24 @@ export class PolygonBackground {
       throw new Error('WASM module failed to load. WebAssembly is required.');
     }
 
-    const rect = this.container.getBoundingClientRect();
+    // Wait for container to have valid dimensions
+    let rect = this.container.getBoundingClientRect();
+    let attempts = 0;
+    const maxAttempts = 20; // ~1 second max wait
+    while ((rect.width === 0 || rect.height === 0) && attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (this.destroyed) return;
+      rect = this.container.getBoundingClientRect();
+      attempts++;
+    }
+
+    // Use minimum dimensions if still zero to avoid initialization errors
+    const width = Math.max(rect.width, 1);
+    const height = Math.max(rect.height, 1);
+
     this.wasmSimulation = new WasmSimulation(
-      rect.width,
-      rect.height,
+      width,
+      height,
       this.options.pointCount
     );
     this.wasmSimulation.setNoiseParams(
@@ -232,13 +251,13 @@ export class PolygonBackground {
    * Set up mouse event listeners
    */
   private setupMouseListeners(): void {
-    // Listen on window for smooth tracking even when pointer-events is none
+    // Listen on window for smooth tracking even when container has z-index: -1
     window.addEventListener('mousemove', this.boundMouseMoveHandler);
     this.container.addEventListener('mouseenter', this.boundMouseEnterHandler);
     this.container.addEventListener('mouseleave', this.boundMouseLeaveHandler);
-    this.container.addEventListener('mousedown', this.boundMouseDownHandler);
+    window.addEventListener('mousedown', this.boundMouseDownHandler);
     window.addEventListener('mouseup', this.boundMouseUpHandler);
-    this.container.addEventListener('click', this.boundClickHandler);
+    window.addEventListener('click', this.boundClickHandler);
   }
 
   /**
@@ -248,9 +267,9 @@ export class PolygonBackground {
     window.removeEventListener('mousemove', this.boundMouseMoveHandler);
     this.container.removeEventListener('mouseenter', this.boundMouseEnterHandler);
     this.container.removeEventListener('mouseleave', this.boundMouseLeaveHandler);
-    this.container.removeEventListener('mousedown', this.boundMouseDownHandler);
+    window.removeEventListener('mousedown', this.boundMouseDownHandler);
     window.removeEventListener('mouseup', this.boundMouseUpHandler);
-    this.container.removeEventListener('click', this.boundClickHandler);
+    window.removeEventListener('click', this.boundClickHandler);
   }
 
   /**
@@ -288,6 +307,7 @@ export class PolygonBackground {
    */
   private handleMouseDown(e: MouseEvent): void {
     if (!this.options.interaction.holdGravityWell) return;
+    if (!this.mouseInCanvas) return;
 
     const rect = this.container.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -327,6 +347,7 @@ export class PolygonBackground {
    */
   private handleClick(e: MouseEvent): void {
     if (!this.options.interaction.clickShockwave) return;
+    if (!this.mouseInCanvas) return;
 
     const rect = this.container.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -483,7 +504,7 @@ export class PolygonBackground {
    * Render the current frame
    */
   private render(): void {
-    if (!this.wasmSimulation) return;
+    if (!this.wasmSimulation || this.destroyed) return;
 
     // Use cached dimensions to avoid layout thrashing
     const width = this.cachedWidth;
@@ -532,7 +553,7 @@ export class PolygonBackground {
    * Animation loop
    */
   private animate = (): void => {
-    if (!this.running) return;
+    if (!this.running || this.destroyed) return;
 
     const now = performance.now();
 
@@ -630,7 +651,7 @@ export class PolygonBackground {
    * Start the animation
    */
   start(): void {
-    if (this.running) return;
+    if (this.running || this.destroyed) return;
     this.running = true;
     this.paused = false;
     this.startTime = performance.now();
@@ -669,6 +690,7 @@ export class PolygonBackground {
    * Clean up and remove the component
    */
   destroy(): void {
+    this.destroyed = true;
     this.stop();
 
     if (this.resizeObserver) {

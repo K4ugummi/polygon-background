@@ -11,7 +11,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
         <span class="logo">Polygon Background</span>
         <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">Home</a>
         <a routerLink="/interactive" routerLinkActive="active">Interactive</a>
-        <a routerLink="/themes" routerLinkActive="active">Themes</a>
+        <a routerLink="/components" routerLinkActive="active">Components</a>
       </nav>
       <main class="main">
         <router-outlet />

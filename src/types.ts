@@ -205,7 +205,7 @@ export const DEFAULT_LIGHT: LightConfig = {
  * Default mouse configuration
  */
 export const DEFAULT_MOUSE: MouseConfig = {
-  enabled: true,
+  enabled: false,
   radius: 200,
   radiusUnit: 'px',
   strength: 80,
@@ -218,8 +218,8 @@ export const DEFAULT_MOUSE: MouseConfig = {
  * Default interaction configuration
  */
 export const DEFAULT_INTERACTION: InteractionConfig = {
-  clickShockwave: true,
-  holdGravityWell: true,
+  clickShockwave: false,
+  holdGravityWell: false,
   gravityWellAttract: false,
 };
 

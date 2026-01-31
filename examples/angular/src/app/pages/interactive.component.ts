@@ -115,6 +115,7 @@ export class InteractiveComponent implements AfterViewInit, OnDestroy {
       theme: 'ocean',
       pointCount: 100,
       mouse: { enabled: true, mode: 'push' as const, strength: 80 },
+      interaction: { clickShockwave: true, holdGravityWell: true },
     });
   }
 
