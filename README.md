@@ -2,6 +2,8 @@
 
 Beautiful, animated polygon backgrounds for web applications. Built with WebGL and WebAssembly for smooth 60fps performance.
 
+![Polygon Background Demo](public/home.png)
+
 ## Features
 
 - **WebGL Rendering** - Hardware-accelerated graphics for smooth animations
@@ -114,7 +116,20 @@ export class BackgroundComponent implements AfterViewInit, OnDestroy {
 }
 ```
 
-See `examples/` for complete working demos with theme switching and interactive physics
+See `examples/` for complete working demos with theme switching and interactive physics.
+
+## Component Examples
+
+The library can be used to create stunning backgrounds for any UI component:
+
+### Login Card
+![Login Card](public/login-card.png)
+
+### Toolbar
+![Toolbar](public/toolbar.png)
+
+### Dialog
+![Dialog](public/dialog.png)
 
 ## Configuration
 
