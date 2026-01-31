@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import AppBar from './components/AppBar.vue';
-import HeroSection from './components/HeroSection.vue';
-import CardGrid from './components/CardGrid.vue';
-import InteractiveSection from './components/InteractiveSection.vue';
-import ThemeSwitcher from './components/ThemeSwitcher.vue';
-import ControlPanel from './components/ControlPanel.vue';
+import { RouterLink, RouterView, useRoute } from 'vue-router';
+
+const navItems = [
+  { path: '/', label: 'Home' },
+  { path: '/interactive', label: 'Interactive' },
+  { path: '/themes', label: 'Themes' },
+];
+
+const route = useRoute();
 </script>
 
 <template>
   <div class="app">
-    <AppBar />
+    <nav class="nav">
+      <span class="logo">Polygon Background</span>
+      <RouterLink
+        v-for="item in navItems"
+        :key="item.path"
+        :to="item.path"
+        :class="{ active: route.path === item.path }"
+      >
+        {{ item.label }}
+      </RouterLink>
+    </nav>
     <main class="main">
-      <HeroSection />
-      <CardGrid />
-      <InteractiveSection />
-      <ThemeSwitcher />
-      <ControlPanel />
+      <RouterView />
     </main>
   </div>
 </template>
@@ -23,11 +32,39 @@ import ControlPanel from './components/ControlPanel.vue';
 <style scoped>
 .app {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  background: rgba(0, 0, 0, 0.8);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+.logo {
+  color: #fff;
+  font-weight: bold;
+  margin-right: 2rem;
+}
+
+.nav a {
+  color: #94a3b8;
+}
+
+.nav a.active {
+  color: #6366f1;
+  font-weight: 600;
 }
 
 .main {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  flex: 1;
+  padding-top: 60px;
 }
 </style>

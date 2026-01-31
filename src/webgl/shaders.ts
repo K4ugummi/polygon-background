@@ -63,8 +63,8 @@ void main() {
     ? 1.0
     : max(0.3, 1.0 - (xyDist - falloffStart) / (falloffEnd - falloffStart) * 0.7);
 
-  // Height bonus - higher triangles catch more light
-  float heightBonus = a_height * 0.3;
+  // Height bonus - higher triangles catch more light (increased from 0.3 to 0.6)
+  float heightBonus = a_height * 0.6;
 
   // Combine lighting
   float diffuseContribution = (diffuse * 0.6 + 0.4) * u_shadowIntensity * distanceFactor;

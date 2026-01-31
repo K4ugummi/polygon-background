@@ -3,6 +3,7 @@ import type {
   ResolvedOptions,
   LightConfig,
   MouseConfig,
+  InteractionConfig,
   HeightConfig,
   TransitionConfig,
   PerformanceConfig,
@@ -11,6 +12,7 @@ import {
   DEFAULT_OPTIONS,
   DEFAULT_LIGHT,
   DEFAULT_MOUSE,
+  DEFAULT_INTERACTION,
   DEFAULT_HEIGHT,
   DEFAULT_TRANSITION,
   DEFAULT_PERFORMANCE,
@@ -50,6 +52,13 @@ export class PolygonBackground {
   private boundMouseMoveHandler: (e: MouseEvent) => void;
   private boundMouseEnterHandler: () => void;
   private boundMouseLeaveHandler: () => void;
+  private boundMouseDownHandler: (e: MouseEvent) => void;
+  private boundMouseUpHandler: (e: MouseEvent) => void;
+  private boundClickHandler: (e: MouseEvent) => void;
+
+  // Gravity well state
+  private gravityWellActive: boolean = false;
+  private holdTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Theme transition
   private currentTheme: ThemeDefinition;
@@ -117,6 +126,9 @@ export class PolygonBackground {
     this.boundMouseMoveHandler = this.handleMouseMove.bind(this);
     this.boundMouseEnterHandler = this.handleMouseEnter.bind(this);
     this.boundMouseLeaveHandler = this.handleMouseLeave.bind(this);
+    this.boundMouseDownHandler = this.handleMouseDown.bind(this);
+    this.boundMouseUpHandler = this.handleMouseUp.bind(this);
+    this.boundClickHandler = this.handleClick.bind(this);
     this.setupMouseListeners();
 
     // Initial setup
@@ -148,9 +160,23 @@ export class PolygonBackground {
     );
     this.wasmSimulation.setNoiseParams(
       this.options.height.noiseScale,
-      this.options.height.animationSpeed,
+      0, // animationSpeed - not used anymore
       this.options.height.centerFalloff,
       this.options.height.intensity
+    );
+    this.updatePhysicsParams();
+  }
+
+  /**
+   * Update physics parameters in WASM
+   */
+  private updatePhysicsParams(): void {
+    if (!this.wasmSimulation) return;
+
+    this.wasmSimulation.setPhysicsParams(
+      this.options.mouse.springBack,
+      0.85, // damping constant
+      this.options.mouse.velocityInfluence
     );
   }
 
@@ -183,6 +209,10 @@ export class PolygonBackground {
         ...DEFAULT_MOUSE,
         ...options?.mouse,
       },
+      interaction: {
+        ...DEFAULT_INTERACTION,
+        ...options?.interaction,
+      },
       height: {
         ...DEFAULT_HEIGHT,
         ...options?.height,
@@ -206,6 +236,9 @@ export class PolygonBackground {
     window.addEventListener('mousemove', this.boundMouseMoveHandler);
     this.container.addEventListener('mouseenter', this.boundMouseEnterHandler);
     this.container.addEventListener('mouseleave', this.boundMouseLeaveHandler);
+    this.container.addEventListener('mousedown', this.boundMouseDownHandler);
+    window.addEventListener('mouseup', this.boundMouseUpHandler);
+    this.container.addEventListener('click', this.boundClickHandler);
   }
 
   /**
@@ -215,6 +248,9 @@ export class PolygonBackground {
     window.removeEventListener('mousemove', this.boundMouseMoveHandler);
     this.container.removeEventListener('mouseenter', this.boundMouseEnterHandler);
     this.container.removeEventListener('mouseleave', this.boundMouseLeaveHandler);
+    this.container.removeEventListener('mousedown', this.boundMouseDownHandler);
+    window.removeEventListener('mouseup', this.boundMouseUpHandler);
+    this.container.removeEventListener('click', this.boundClickHandler);
   }
 
   /**
@@ -245,6 +281,58 @@ export class PolygonBackground {
    */
   private handleMouseLeave(): void {
     this.mouseInCanvas = false;
+  }
+
+  /**
+   * Handle mouse down - start gravity well after delay
+   */
+  private handleMouseDown(e: MouseEvent): void {
+    if (!this.options.interaction.holdGravityWell) return;
+
+    const rect = this.container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Start gravity well after short delay (150ms hold)
+    this.holdTimeout = setTimeout(() => {
+      this.gravityWellActive = true;
+      if (this.wasmSimulation) {
+        this.wasmSimulation.setGravityWell(
+          x,
+          y,
+          true,
+          this.options.interaction.gravityWellAttract
+        );
+      }
+    }, 150);
+  }
+
+  /**
+   * Handle mouse up - stop gravity well
+   */
+  private handleMouseUp(): void {
+    if (this.holdTimeout) {
+      clearTimeout(this.holdTimeout);
+      this.holdTimeout = null;
+    }
+
+    if (this.gravityWellActive && this.wasmSimulation) {
+      this.wasmSimulation.setGravityWell(0, 0, false, false);
+      this.gravityWellActive = false;
+    }
+  }
+
+  /**
+   * Handle click - trigger shockwave
+   */
+  private handleClick(e: MouseEvent): void {
+    if (!this.options.interaction.clickShockwave) return;
+
+    const rect = this.container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    this.triggerShockwave(x, y);
   }
 
   /**
@@ -322,13 +410,26 @@ export class PolygonBackground {
     const width = this.cachedWidth;
     const height = this.cachedHeight;
 
-    const { mode: heightMode } = this.options.height;
-    const { enabled: mouseEnabled, radius, radiusUnit, heightInfluence } = this.options.mouse;
+    const {
+      enabled: mouseEnabled,
+      radius,
+      radiusUnit,
+      strength,
+      mode,
+    } = this.options.mouse;
 
     // Calculate mouse radius in pixels
     const mouseRadius = radiusUnit === 'percent'
       ? Math.min(width, height) * (radius / 100)
       : radius;
+
+    // Convert mode string to number
+    const modeMap: Record<string, number> = {
+      push: 0,
+      pull: 1,
+      swirl: 2,
+    };
+    const modeNum = modeMap[mode] ?? 0;
 
     // Update mouse state
     this.wasmSimulation.setMouseState(
@@ -336,15 +437,21 @@ export class PolygonBackground {
       this.mouseY,
       mouseEnabled && this.mouseInCanvas,
       mouseRadius,
-      heightInfluence
+      strength,
+      modeNum
     );
 
-    // Update points in WASM
+    // Update gravity well position if active
+    if (this.gravityWellActive) {
+      this.wasmSimulation.updateGravityWellPosition(this.mouseX, this.mouseY);
+    }
+
+    // Update points in WASM (height is static, no animation)
     this.wasmSimulation.update_points(
       deltaTime,
       this.options.speed,
       this.currentTime,
-      heightMode === 'animate'
+      false // no height animation
     );
 
     // Triangulate
@@ -673,6 +780,11 @@ export class PolygonBackground {
    */
   setMouseConfig(config: Partial<MouseConfig>): void {
     this.options.mouse = { ...this.options.mouse, ...config };
+
+    // Update physics params if they changed
+    if (config.springBack !== undefined || config.velocityInfluence !== undefined) {
+      this.updatePhysicsParams();
+    }
   }
 
   /**
@@ -685,11 +797,45 @@ export class PolygonBackground {
     if (this.wasmSimulation) {
       this.wasmSimulation.setNoiseParams(
         this.options.height.noiseScale,
-        this.options.height.animationSpeed,
+        0, // animationSpeed not used
         this.options.height.centerFalloff,
         this.options.height.intensity
       );
     }
+  }
+
+  /**
+   * Update interaction configuration
+   */
+  setInteractionConfig(config: Partial<InteractionConfig>): void {
+    this.options.interaction = { ...this.options.interaction, ...config };
+  }
+
+  /**
+   * Trigger a shockwave at position (defaults to center)
+   */
+  triggerShockwave(x?: number, y?: number): void {
+    if (!this.wasmSimulation) return;
+
+    const posX = x ?? this.cachedWidth / 2;
+    const posY = y ?? this.cachedHeight / 2;
+
+    this.wasmSimulation.triggerShockwave(posX, posY);
+  }
+
+  /**
+   * Start or stop a gravity well at position
+   */
+  setGravityWell(x: number, y: number, active: boolean, attract?: boolean): void {
+    if (!this.wasmSimulation) return;
+
+    this.gravityWellActive = active;
+    this.wasmSimulation.setGravityWell(
+      x,
+      y,
+      active,
+      attract ?? this.options.interaction.gravityWellAttract
+    );
   }
 
   /**

@@ -1,46 +1,57 @@
 import { Component } from '@angular/core';
-import { AppBarComponent } from './components/app-bar/app-bar.component';
-import { HeroSectionComponent } from './components/hero-section/hero-section.component';
-import { CardGridComponent } from './components/card-grid/card-grid.component';
-import { InteractiveSectionComponent } from './components/interactive-section/interactive-section.component';
-import { ThemeSwitcherComponent } from './components/theme-switcher/theme-switcher.component';
-import { ControlPanelComponent } from './components/control-panel/control-panel.component';
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [
-    AppBarComponent,
-    HeroSectionComponent,
-    CardGridComponent,
-    InteractiveSectionComponent,
-    ThemeSwitcherComponent,
-    ControlPanelComponent,
-  ],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive],
   template: `
     <div class="app">
-      <app-bar />
+      <nav class="nav">
+        <span class="logo">Polygon Background</span>
+        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">Home</a>
+        <a routerLink="/interactive" routerLinkActive="active">Interactive</a>
+        <a routerLink="/themes" routerLinkActive="active">Themes</a>
+      </nav>
       <main class="main">
-        <hero-section />
-        <card-grid />
-        <interactive-section />
-        <theme-switcher />
-        <control-panel />
+        <router-outlet />
       </main>
     </div>
   `,
-  styles: [
-    `
-      .app {
-        min-height: 100vh;
-      }
-
-      .main {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-      }
-    `,
-  ],
+  styles: [`
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .nav {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem 2rem;
+      background: rgba(0, 0, 0, 0.8);
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+    }
+    .logo {
+      color: #fff;
+      font-weight: bold;
+      margin-right: 2rem;
+    }
+    .nav a {
+      color: #94a3b8;
+      text-decoration: none;
+    }
+    .nav a.active {
+      color: #6366f1;
+      font-weight: 600;
+    }
+    .main {
+      flex: 1;
+      padding-top: 60px;
+    }
+  `],
 })
 export class AppComponent {}

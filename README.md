@@ -5,11 +5,12 @@ Beautiful, animated polygon backgrounds for web applications. Built with WebGL a
 ## Features
 
 - **WebGL Rendering** - Hardware-accelerated graphics for smooth animations
-- **WASM Acceleration** - WebAssembly-powered simulation with JavaScript fallback
+- **WASM Acceleration** - WebAssembly-powered physics simulation
 - **5 Built-in Themes** - midnight, ocean, sunset, matrix, monochrome
-- **Mouse Interaction** - Responsive height deformation on hover
+- **Interactive Physics** - Push, pull, and swirl effects with spring physics
+- **Click Shockwaves** - Expanding wave effects on click
+- **Gravity Wells** - Hold to attract or repel points
 - **Smooth Transitions** - Animated theme switching
-- **Fully Configurable** - Control points, speed, lighting, and more
 - **TypeScript Support** - Full type definitions included
 - **Framework Agnostic** - Works with React, Vue, Angular, or vanilla JS
 
@@ -28,7 +29,6 @@ const container = document.getElementById('background');
 const bg = new PolygonBackground(container, {
   theme: 'midnight',
   pointCount: 80,
-  speed: 1,
 });
 ```
 
@@ -36,9 +36,14 @@ const bg = new PolygonBackground(container, {
 
 See the `examples/` directory for complete framework examples:
 
-- **React** - `examples/react/` (Vite + React 18 + TypeScript)
-- **Vue** - `examples/vue/` (Vite + Vue 3 + TypeScript)
-- **Angular** - `examples/angular/` (Angular 18 + TypeScript)
+- **React** - `examples/react/`
+- **Vue** - `examples/vue/`
+- **Angular** - `examples/angular/`
+
+Each example includes:
+- Home page with theme switching
+- Interactive page demonstrating mouse physics
+- Themes page showcasing all available themes
 
 ## Configuration
 
@@ -63,16 +68,26 @@ const bg = new PolygonBackground(container, {
   // Mouse interaction
   mouse: {
     enabled: true,
-    radius: 150,
+    radius: 200,
     radiusUnit: 'px',
-    heightInfluence: 0.8,
+    strength: 80,           // displacement strength (0-150)
+    mode: 'push',           // 'push' | 'pull' | 'swirl'
+    springBack: 0.08,       // how fast points return (0-1)
+    velocityInfluence: 0.5, // mouse speed effect (0-1)
   },
 
-  // Height/topography
+  // Click/hold interactions
+  interaction: {
+    clickShockwave: true,     // trigger shockwave on click
+    holdGravityWell: true,    // create gravity well on hold
+    gravityWellAttract: false, // attract (true) or repel (false)
+  },
+
+  // Height/topography (static, for lighting variation)
   height: {
-    mode: 'animate', // 'static' | 'animate' | 'mouse'
-    intensity: 0.6,
     noiseScale: 0.003,
+    intensity: 0.6,
+    centerFalloff: 0.3,
   },
 
   // Theme transitions
@@ -83,7 +98,7 @@ const bg = new PolygonBackground(container, {
 
   // Performance
   performance: {
-    targetFPS: 60,
+    targetFPS: 0, // 0 = unlimited
     showFPS: false,
   },
 });
@@ -113,9 +128,14 @@ bg.getTheme();
 // Configuration
 bg.setOption('pointCount', 100);
 bg.getOption('pointCount');
-bg.setLightConfig({ position: { x: 0.5, y: 0.5 } });
-bg.setMouseConfig({ enabled: true, radius: 200 });
+bg.setLightConfig({ mode: 'mouse' });
+bg.setMouseConfig({ mode: 'swirl', strength: 100 });
+bg.setInteractionConfig({ clickShockwave: false });
 bg.setHeightConfig({ intensity: 0.8 });
+
+// Interactive effects
+bg.triggerShockwave(x?, y?);  // trigger shockwave at position (default: center)
+bg.setGravityWell(x, y, active, attract?);  // control gravity well
 ```
 
 ### Available Themes
@@ -161,9 +181,6 @@ npm run dev
 
 # Build for production
 npm run build
-
-# Type check
-npm run typecheck
 ```
 
 ### Running Examples
@@ -173,42 +190,13 @@ npm run typecheck
 npm link
 
 # Run React example
-cd examples/react
-npm install
-npm link polygon-background
-npm run dev  # http://localhost:3000
+cd examples/react && npm install && npm link polygon-background && npm run dev
 
 # Run Vue example
-cd examples/vue
-npm install
-npm link polygon-background
-npm run dev  # http://localhost:3001
+cd examples/vue && npm install && npm link polygon-background && npm run dev
 
 # Run Angular example
-cd examples/angular
-npm install
-npm link polygon-background
-npm run dev  # http://localhost:3002
-```
-
-## Project Structure
-
-```
-polygon-background/
-├── src/
-│   ├── index.ts              # Main exports
-│   ├── PolygonBackground.ts  # Core class
-│   ├── themes.ts             # Theme definitions
-│   ├── types.ts              # TypeScript types
-│   ├── webgl/                # WebGL renderer
-│   └── wasm/                 # WASM simulation
-├── wasm/                     # Rust WASM source
-├── examples/
-│   ├── react/                # React example
-│   ├── vue/                  # Vue example
-│   └── angular/              # Angular example
-├── dist/                     # Built library
-└── package.json
+cd examples/angular && npm install && npm link polygon-background && npm run dev
 ```
 
 ## Browser Support

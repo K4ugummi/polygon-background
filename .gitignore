@@ -10,3 +10,8 @@ wasm/pkg/
 
 # Claude Code
 .claude/
+
+# Claude Code project files
+CLAUDE.md
+PLAN.md
+*.plan

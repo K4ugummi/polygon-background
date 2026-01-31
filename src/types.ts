@@ -47,22 +47,37 @@ export interface MouseConfig {
   radius: number;
   /** Whether radius is in pixels ('px') or percentage ('percent') */
   radiusUnit: 'px' | 'percent';
-  /** Height influence: positive = rise toward cursor, negative = push away */
-  heightInfluence: number;
+  /** Displacement strength in pixels (0-150) - how much points are pushed/pulled */
+  strength: number;
+  /** Interaction mode: push, pull, or swirl */
+  mode: 'push' | 'pull' | 'swirl';
+  /** How fast points spring back (0=never, 1=instant). Default: 0.08 */
+  springBack: number;
+  /** How much mouse velocity influences push (0-1). Default: 0.5 */
+  velocityInfluence: number;
+}
+
+/**
+ * Interaction configuration for clicks and holds
+ */
+export interface InteractionConfig {
+  /** Enable click shockwave effect */
+  clickShockwave: boolean;
+  /** Enable hold-to-create gravity well */
+  holdGravityWell: boolean;
+  /** Whether gravity well attracts (true) or repels (false) */
+  gravityWellAttract: boolean;
 }
 
 /**
  * Height/topography configuration
+ * Height is static (generated once at startup for lighting variation)
  */
 export interface HeightConfig {
-  /** Height animation mode */
-  mode: 'static' | 'animate' | 'mouse';
   /** Noise scale - larger = bigger features */
   noiseScale: number;
   /** Height intensity (0-1) - how much height affects shading */
   intensity: number;
-  /** Animation speed (when mode is 'animate') */
-  animationSpeed: number;
   /** Distance falloff from center (0 = none, 1 = strong) */
   centerFalloff: number;
 }
@@ -135,6 +150,10 @@ export interface PolygonBackgroundOptions {
   /** Mouse interaction configuration */
   mouse?: Partial<MouseConfig>;
 
+  // Interaction (clicks, holds)
+  /** Interaction configuration */
+  interaction?: Partial<InteractionConfig>;
+
   // Height/topography
   /** Height map configuration */
   height?: Partial<HeightConfig>;
@@ -166,6 +185,7 @@ export interface ResolvedOptions {
   theme: string;
   light: LightConfig;
   mouse: MouseConfig;
+  interaction: InteractionConfig;
   height: HeightConfig;
   transition: TransitionConfig;
   performance: PerformanceConfig;
@@ -185,20 +205,30 @@ export const DEFAULT_LIGHT: LightConfig = {
  * Default mouse configuration
  */
 export const DEFAULT_MOUSE: MouseConfig = {
-  enabled: false,
-  radius: 150,
+  enabled: true,
+  radius: 200,
   radiusUnit: 'px',
-  heightInfluence: 0.5,
+  strength: 80,
+  mode: 'push',
+  springBack: 0.08,
+  velocityInfluence: 0.5,
 };
 
 /**
- * Default height configuration
+ * Default interaction configuration
+ */
+export const DEFAULT_INTERACTION: InteractionConfig = {
+  clickShockwave: true,
+  holdGravityWell: true,
+  gravityWellAttract: false,
+};
+
+/**
+ * Default height configuration (static noise for lighting variation)
  */
 export const DEFAULT_HEIGHT: HeightConfig = {
-  mode: 'animate',
   noiseScale: 0.003,
   intensity: 0.6,
-  animationSpeed: 0.00002,
   centerFalloff: 0.3,
 };
 
@@ -236,6 +266,7 @@ export const DEFAULT_OPTIONS: ResolvedOptions = {
   theme: 'midnight',
   light: { ...DEFAULT_LIGHT },
   mouse: { ...DEFAULT_MOUSE },
+  interaction: { ...DEFAULT_INTERACTION },
   height: { ...DEFAULT_HEIGHT },
   transition: { ...DEFAULT_TRANSITION },
   performance: { ...DEFAULT_PERFORMANCE },

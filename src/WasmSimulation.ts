@@ -108,10 +108,55 @@ export class WasmSimulation {
     y: number,
     inCanvas: boolean,
     radius: number,
-    heightInfluence: number
+    strength: number,
+    mode: number // 0=push, 1=pull, 2=swirl
   ): void {
     if (this.simulation) {
-      this.simulation.set_mouse_state(x, y, inCanvas, radius, heightInfluence);
+      this.simulation.set_mouse_state(
+        x,
+        y,
+        inCanvas,
+        radius,
+        0, // _height_influence (unused, kept for API compatibility)
+        strength,
+        mode
+      );
+    }
+  }
+
+  /**
+   * Set physics parameters for spring-back behavior
+   */
+  setPhysicsParams(springBack: number, damping: number, velocityInfluence: number): void {
+    if (this.simulation) {
+      this.simulation.set_physics_params(springBack, damping, velocityInfluence);
+    }
+  }
+
+  /**
+   * Trigger a shockwave at position
+   */
+  triggerShockwave(x: number, y: number, strength: number = 100): void {
+    if (this.simulation) {
+      this.simulation.trigger_shockwave(x, y, strength);
+    }
+  }
+
+  /**
+   * Set gravity well state
+   */
+  setGravityWell(x: number, y: number, active: boolean, attract: boolean): void {
+    if (this.simulation) {
+      this.simulation.set_gravity_well(x, y, active, attract);
+    }
+  }
+
+  /**
+   * Update gravity well position (while active)
+   */
+  updateGravityWellPosition(x: number, y: number): void {
+    if (this.simulation) {
+      this.simulation.update_gravity_well_position(x, y);
     }
   }
 

@@ -416,7 +416,7 @@
       <button class="tab active" data-tab="theme">Theme</button>
       <button class="tab" data-tab="points">Points</button>
       <button class="tab" data-tab="lighting">Light</button>
-      <button class="tab" data-tab="height">Height</button>
+      <button class="tab" data-tab="interact">Interact</button>
       <button class="tab" data-tab="perf">Perf</button>
     </div>
 
@@ -542,17 +542,75 @@
         </div>
       </div>
 
-      <!-- Height Tab -->
-      <div class="tab-panel" id="tab-height">
-        <div class="section-header">Topography</div>
+      <!-- Interaction Tab -->
+      <div class="tab-panel" id="tab-interact">
+        <div class="section-header">Mouse Effect</div>
         <div class="control-group">
-          <label>Animation Mode</label>
-          <select id="heightMode">
-            <option value="animate">Animated</option>
-            <option value="static">Static</option>
-            <option value="mouse">Mouse Only</option>
+          <div class="toggle-row">
+            <label>Enable Mouse Effect</label>
+            <div class="toggle active" id="mouseEnabled"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Mode</label>
+          <select id="mouseMode">
+            <option value="push">Push Away</option>
+            <option value="pull">Pull Toward</option>
+            <option value="swirl">Swirl</option>
           </select>
         </div>
+        <div class="control-group">
+          <label>Radius (px)</label>
+          <div class="control-row">
+            <input type="range" id="mouseRadius" min="50" max="400" value="200">
+            <span class="control-value" id="mouseRadiusValue">200px</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Strength</label>
+          <div class="control-row">
+            <input type="range" id="mouseStrength" min="0" max="150" step="5" value="80">
+            <span class="control-value" id="mouseStrengthValue">80</span>
+          </div>
+        </div>
+
+        <div class="section-header">Physics</div>
+        <div class="control-group">
+          <label>Spring Back</label>
+          <div class="control-row">
+            <input type="range" id="springBack" min="0.01" max="0.3" step="0.01" value="0.08">
+            <span class="control-value" id="springBackValue">0.08</span>
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Velocity Influence</label>
+          <div class="control-row">
+            <input type="range" id="velocityInfluence" min="0" max="1" step="0.05" value="0.5">
+            <span class="control-value" id="velocityInfluenceValue">0.50</span>
+          </div>
+        </div>
+
+        <div class="section-header">Click Effects</div>
+        <div class="control-group">
+          <div class="toggle-row">
+            <label>Click Shockwave</label>
+            <div class="toggle active" id="clickShockwave"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <div class="toggle-row">
+            <label>Hold Gravity Well</label>
+            <div class="toggle active" id="holdGravityWell"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <div class="toggle-row">
+            <label>Gravity Well Attracts</label>
+            <div class="toggle" id="gravityWellAttract"></div>
+          </div>
+        </div>
+
+        <div class="section-header">Height (Static)</div>
         <div class="control-group">
           <label>Height Intensity</label>
           <div class="control-row">
@@ -568,13 +626,6 @@
           </div>
         </div>
         <div class="control-group">
-          <label>Animation Speed</label>
-          <div class="control-row">
-            <input type="range" id="animationSpeed" min="0.000005" max="0.0001" step="0.000005" value="0.00002">
-            <span class="control-value" id="animationSpeedValue">0.00002</span>
-          </div>
-        </div>
-        <div class="control-group">
           <label>Center Falloff</label>
           <div class="control-row">
             <input type="range" id="centerFalloff" min="0" max="1" step="0.05" value="0.3">
@@ -582,26 +633,8 @@
           </div>
         </div>
 
-        <div class="section-header">Mouse Interaction</div>
-        <div class="control-group">
-          <div class="toggle-row">
-            <label>Enable Mouse Effect</label>
-            <div class="toggle" id="mouseEnabled"></div>
-          </div>
-        </div>
-        <div class="control-group">
-          <label>Radius (px)</label>
-          <div class="control-row">
-            <input type="range" id="mouseRadius" min="50" max="400" value="150">
-            <span class="control-value" id="mouseRadiusValue">150px</span>
-          </div>
-        </div>
-        <div class="control-group">
-          <label>Height Influence</label>
-          <div class="control-row">
-            <input type="range" id="mouseInfluence" min="-1" max="1" step="0.1" value="0.5">
-            <span class="control-value" id="mouseInfluenceValue">0.50</span>
-          </div>
+        <div class="button-group">
+          <button class="btn btn-primary" id="triggerShockwaveBtn">Trigger Shockwave</button>
         </div>
       </div>
 
@@ -646,7 +679,7 @@
     const container = document.getElementById('background-container');
     let bg = new PolygonBackground(container, {
       theme: 'midnight',
-      height: { mode: 'animate' }
+      mouse: { enabled: true }
     });
 
     // Menu toggle
@@ -793,11 +826,53 @@
       updateValue('highlightIntensity', value);
     });
 
-    // Height controls
-    document.getElementById('heightMode').addEventListener('change', (e) => {
-      bg.setHeightConfig({ mode: e.target.value });
+    // Interaction controls
+    setupToggle('mouseEnabled', true, (enabled) => {
+      bg.setMouseConfig({ enabled });
     });
 
+    document.getElementById('mouseMode').addEventListener('change', (e) => {
+      bg.setMouseConfig({ mode: e.target.value });
+    });
+
+    document.getElementById('mouseRadius').addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      bg.setMouseConfig({ radius: value });
+      updateValue('mouseRadius', value, 'px');
+    });
+
+    document.getElementById('mouseStrength').addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      bg.setMouseConfig({ strength: value });
+      updateValue('mouseStrength', value);
+    });
+
+    document.getElementById('springBack').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setMouseConfig({ springBack: value });
+      updateValue('springBack', value);
+    });
+
+    document.getElementById('velocityInfluence').addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      bg.setMouseConfig({ velocityInfluence: value });
+      updateValue('velocityInfluence', value);
+    });
+
+    // Click effects
+    setupToggle('clickShockwave', true, (enabled) => {
+      bg.setInteractionConfig({ clickShockwave: enabled });
+    });
+
+    setupToggle('holdGravityWell', true, (enabled) => {
+      bg.setInteractionConfig({ holdGravityWell: enabled });
+    });
+
+    setupToggle('gravityWellAttract', false, (attract) => {
+      bg.setInteractionConfig({ gravityWellAttract: attract });
+    });
+
+    // Height controls (static)
     document.getElementById('heightIntensity').addEventListener('input', (e) => {
       const value = parseFloat(e.target.value);
       bg.setHeightConfig({ intensity: value });
@@ -810,33 +885,15 @@
       updateValue('noiseScale', value);
     });
 
-    document.getElementById('animationSpeed').addEventListener('input', (e) => {
-      const value = parseFloat(e.target.value);
-      bg.setHeightConfig({ animationSpeed: value });
-      updateValue('animationSpeed', value);
-    });
-
     document.getElementById('centerFalloff').addEventListener('input', (e) => {
       const value = parseFloat(e.target.value);
       bg.setHeightConfig({ centerFalloff: value });
       updateValue('centerFalloff', value);
     });
 
-    // Mouse controls
-    setupToggle('mouseEnabled', false, (enabled) => {
-      bg.setMouseConfig({ enabled });
-    });
-
-    document.getElementById('mouseRadius').addEventListener('input', (e) => {
-      const value = parseInt(e.target.value);
-      bg.setMouseConfig({ radius: value });
-      updateValue('mouseRadius', value, 'px');
-    });
-
-    document.getElementById('mouseInfluence').addEventListener('input', (e) => {
-      const value = parseFloat(e.target.value);
-      bg.setMouseConfig({ heightInfluence: value });
-      updateValue('mouseInfluence', value);
+    // Trigger shockwave button
+    document.getElementById('triggerShockwaveBtn').addEventListener('click', () => {
+      bg.triggerShockwave();
     });
 
     // Transition controls
@@ -887,7 +944,7 @@
       bg.destroy();
       bg = new PolygonBackground(container, {
         theme: activeTheme,
-        height: { mode: 'animate' }
+        mouse: { enabled: true }
       });
       pauseBtn.textContent = 'Pause';
 
@@ -900,13 +957,14 @@
       document.getElementById('lightMode').value = 'fixed';
       document.getElementById('lightX').value = 0.3;
       document.getElementById('lightY').value = 0.2;
-      document.getElementById('heightMode').value = 'animate';
+      document.getElementById('mouseMode').value = 'push';
+      document.getElementById('mouseRadius').value = 200;
+      document.getElementById('mouseStrength').value = 80;
+      document.getElementById('springBack').value = 0.08;
+      document.getElementById('velocityInfluence').value = 0.5;
       document.getElementById('heightIntensity').value = 0.6;
       document.getElementById('noiseScale').value = 0.003;
-      document.getElementById('animationSpeed').value = 0.00002;
       document.getElementById('centerFalloff').value = 0.3;
-      document.getElementById('mouseRadius').value = 150;
-      document.getElementById('mouseInfluence').value = 0.5;
 
       // Reset value displays
       updateValue('pointCount', 80);
@@ -916,15 +974,19 @@
       updateValue('strokeWidth', 0.5);
       updateValue('lightX', 0.30);
       updateValue('lightY', 0.20);
+      updateValue('mouseRadius', 200, 'px');
+      updateValue('mouseStrength', 80);
+      updateValue('springBack', 0.08);
+      updateValue('velocityInfluence', 0.50);
       updateValue('heightIntensity', 0.60);
       updateValue('noiseScale', 0.003);
-      updateValue('animationSpeed', 0.00002);
       updateValue('centerFalloff', 0.30);
-      updateValue('mouseRadius', 150, 'px');
-      updateValue('mouseInfluence', 0.50);
 
       // Reset toggles
-      document.getElementById('mouseEnabled').classList.remove('active');
+      document.getElementById('mouseEnabled').classList.add('active');
+      document.getElementById('clickShockwave').classList.add('active');
+      document.getElementById('holdGravityWell').classList.add('active');
+      document.getElementById('gravityWellAttract').classList.remove('active');
       document.getElementById('transitionEnabled').classList.add('active');
       document.getElementById('showFPS').classList.remove('active');
 
