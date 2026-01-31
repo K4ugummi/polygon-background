@@ -46,12 +46,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/k4ugummi/polygon-background.git"
+    "url": "git+https://github.com/K4ugummi/polygon-background.git"
   },
   "bugs": {
-    "url": "https://github.com/k4ugummi/polygon-background/issues"
+    "url": "https://github.com/K4ugummi/polygon-background/issues"
   },
-  "homepage": "https://github.com/k4ugummi/polygon-background#readme",
+  "homepage": "https://github.com/K4ugummi/polygon-background#readme",
   "engines": {
     "node": ">=18.0.0"
   },
