@@ -466,6 +466,7 @@ export class PolygonBackground {
 
       if (this.transitionProgress >= 1) {
         this.currentTheme = this.targetTheme;
+        this.applyThemeToOptions(this.currentTheme);
         this.targetTheme = null;
       }
     }

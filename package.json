@@ -1,7 +1,7 @@
 {
   "name": "polygon-background",
-  "version": "0.1.0",
-  "description": "Animated polygon background component using Delaunay triangulation",
+  "version": "1.0.1",
+  "description": "Beautiful, animated polygon mesh backgrounds for web apps. WebGL + WASM powered, 60fps smooth, 5 themes, mouse-interactive. Works with React, Vue, Angular, or vanilla JS.",
   "type": "module",
   "main": "./dist/polygon-background.js",
   "module": "./dist/polygon-background.js",
@@ -13,13 +13,17 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "README.md"
   ],
+  "sideEffects": false,
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "background",
@@ -27,9 +31,30 @@
     "canvas",
     "animation",
     "delaunay",
-    "triangulation"
+    "triangulation",
+    "webgl",
+    "wasm",
+    "webassembly",
+    "react",
+    "vue",
+    "angular",
+    "mesh",
+    "3d",
+    "graphics"
   ],
+  "author": "k4ugummi",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/k4ugummi/polygon-background.git"
+  },
+  "bugs": {
+    "url": "https://github.com/k4ugummi/polygon-background/issues"
+  },
+  "homepage": "https://github.com/k4ugummi/polygon-background#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "delaunator": "^5.0.1"
   },
