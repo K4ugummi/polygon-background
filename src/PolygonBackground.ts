@@ -16,6 +16,7 @@ import {
   DEFAULT_HEIGHT,
   DEFAULT_TRANSITION,
   DEFAULT_PERFORMANCE,
+  validateOptions,
 } from './types';
 import {
   getTheme,
@@ -41,9 +42,6 @@ export class PolygonBackground {
   private resizeObserver: ResizeObserver | null = null;
   private boundResizeHandler: () => void;
 
-  // Time tracking for animation
-  private startTime: number = 0;
-  private currentTime: number = 0;
 
   // Mouse tracking
   private mouseX: number = 0;
@@ -91,11 +89,14 @@ export class PolygonBackground {
     this.container = container;
 
     // Resolve theme first
-    const themeName = options?.theme || DEFAULT_OPTIONS.theme;
+    // Validate options before processing
+    const validatedOptions = options ? validateOptions(options) : undefined;
+
+    const themeName = validatedOptions?.theme || DEFAULT_OPTIONS.theme;
     this.currentTheme = getTheme(themeName);
 
     // Merge options with theme defaults
-    this.options = this.resolveOptions(options);
+    this.options = this.resolveOptions(validatedOptions);
 
     // Create canvas element
     this.canvas = document.createElement('canvas');
@@ -138,8 +139,7 @@ export class PolygonBackground {
     this.updateCanvasSize();
 
     // Initialize time
-    this.startTime = performance.now();
-
+    
     // Initialize WASM, then start (unless already destroyed)
     this.initializeWasm().then(() => {
       if (!this.destroyed) {
@@ -179,8 +179,6 @@ export class PolygonBackground {
     );
     this.wasmSimulation.setNoiseParams(
       this.options.height.noiseScale,
-      0, // animationSpeed - not used anymore
-      this.options.height.centerFalloff,
       this.options.height.intensity
     );
     this.updatePhysicsParams();
@@ -422,7 +420,7 @@ export class PolygonBackground {
   }
 
   /**
-   * Update WASM simulation
+   * Update WASM simulation using combined tick() for fewer boundary crossings
    */
   private updateWasm(deltaTime: number): void {
     if (!this.wasmSimulation) return;
@@ -445,15 +443,17 @@ export class PolygonBackground {
       : radius;
 
     // Convert mode string to number
-    const modeMap: Record<string, number> = {
-      push: 0,
-      pull: 1,
-      swirl: 2,
-    };
-    const modeNum = modeMap[mode] ?? 0;
+    const modeNum = mode === 'pull' ? 1 : mode === 'swirl' ? 2 : 0;
 
-    // Update mouse state
-    this.wasmSimulation.setMouseState(
+    // Update gravity well position if active (separate call needed)
+    if (this.gravityWellActive) {
+      this.wasmSimulation.updateGravityWellPosition(this.mouseX, this.mouseY);
+    }
+
+    // Combined tick: mouse state + physics + triangulation in single WASM call
+    this.wasmSimulation.tick(
+      deltaTime,
+      this.options.speed,
       this.mouseX,
       this.mouseY,
       mouseEnabled && this.mouseInCanvas,
@@ -461,22 +461,6 @@ export class PolygonBackground {
       strength,
       modeNum
     );
-
-    // Update gravity well position if active
-    if (this.gravityWellActive) {
-      this.wasmSimulation.updateGravityWellPosition(this.mouseX, this.mouseY);
-    }
-
-    // Update points in WASM (height is static, no animation)
-    this.wasmSimulation.update_points(
-      deltaTime,
-      this.options.speed,
-      this.currentTime,
-      false // no height animation
-    );
-
-    // Triangulate
-    this.wasmSimulation.triangulate();
   }
 
   /**
@@ -580,9 +564,6 @@ export class PolygonBackground {
       this.fpsUpdateTime = now;
     }
 
-    // Update time
-    this.currentTime = now - this.startTime;
-
     // Update theme transition
     if (this.targetTheme && this.transitionProgress < 1) {
       const transitionElapsed = now - this.transitionStartTime;
@@ -654,8 +635,7 @@ export class PolygonBackground {
     if (this.running || this.destroyed) return;
     this.running = true;
     this.paused = false;
-    this.startTime = performance.now();
-    this.lastUpdateTime = 0; // Reset to avoid delta time jump
+        this.lastUpdateTime = 0; // Reset to avoid delta time jump
     this.animate();
   }
 
@@ -819,8 +799,6 @@ export class PolygonBackground {
     if (this.wasmSimulation) {
       this.wasmSimulation.setNoiseParams(
         this.options.height.noiseScale,
-        0, // animationSpeed not used
-        this.options.height.centerFalloff,
         this.options.height.intensity
       );
     }

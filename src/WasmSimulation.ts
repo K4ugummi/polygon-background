@@ -86,15 +86,11 @@ export class WasmSimulation {
    */
   setNoiseParams(
     noiseScale: number,
-    animationSpeed: number,
-    centerFalloff: number,
     heightIntensity: number
   ): void {
     if (this.simulation) {
       this.simulation.set_noise_params(
         noiseScale,
-        animationSpeed,
-        centerFalloff,
         heightIntensity
       );
     }
@@ -117,7 +113,6 @@ export class WasmSimulation {
         y,
         inCanvas,
         radius,
-        0, // _height_influence (unused, kept for API compatibility)
         strength,
         mode
       );
@@ -184,10 +179,39 @@ export class WasmSimulation {
   /**
    * Update point positions
    */
-  update_points(deltaTime: number, speed: number, time: number, animateHeight: boolean): void {
+  update_points(deltaTime: number, speed: number): void {
     if (this.simulation) {
-      this.simulation.update_points(deltaTime, speed, time, animateHeight);
+      this.simulation.update_points(deltaTime, speed);
     }
+  }
+
+  /**
+   * Combined tick - update physics + triangulate in single WASM call
+   * Reduces JS-WASM boundary crossings for better performance
+   */
+  tick(
+    deltaTime: number,
+    speed: number,
+    mouseX: number,
+    mouseY: number,
+    mouseInCanvas: boolean,
+    mouseRadius: number,
+    mouseStrength: number,
+    mouseMode: number
+  ): number {
+    if (this.simulation) {
+      return this.simulation.tick(
+        deltaTime,
+        speed,
+        mouseX,
+        mouseY,
+        mouseInCanvas,
+        mouseRadius,
+        mouseStrength,
+        mouseMode
+      );
+    }
+    return 0;
   }
 
   /**

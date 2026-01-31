@@ -249,6 +249,97 @@ export const DEFAULT_PERFORMANCE: PerformanceConfig = {
 };
 
 /**
+ * Validation constraints
+ */
+export const VALIDATION = {
+  pointCount: { min: 3, max: 10000 },
+  pointSize: { min: 0.1, max: 50 },
+  speed: { min: 0, max: 10 },
+  fillOpacity: { min: 0, max: 1 },
+  strokeWidth: { min: 0, max: 10 },
+  radius: { min: 1, max: 2000 },
+  strength: { min: 0, max: 500 },
+  springBack: { min: 0, max: 1 },
+  velocityInfluence: { min: 0, max: 2 },
+  noiseScale: { min: 0.0001, max: 1 },
+  intensity: { min: 0, max: 2 },
+  centerFalloff: { min: 0, max: 1 },
+  duration: { min: 0, max: 10000 },
+  targetFPS: { min: 0, max: 240 },
+} as const;
+
+/**
+ * Clamp a value between min and max
+ */
+export function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Validate and clamp options
+ */
+export function validateOptions(options: PolygonBackgroundOptions): PolygonBackgroundOptions {
+  const validated = { ...options };
+
+  if (validated.pointCount !== undefined) {
+    validated.pointCount = clamp(validated.pointCount, VALIDATION.pointCount.min, VALIDATION.pointCount.max);
+  }
+  if (validated.pointSize !== undefined) {
+    validated.pointSize = clamp(validated.pointSize, VALIDATION.pointSize.min, VALIDATION.pointSize.max);
+  }
+  if (validated.speed !== undefined) {
+    validated.speed = clamp(validated.speed, VALIDATION.speed.min, VALIDATION.speed.max);
+  }
+  if (validated.fillOpacity !== undefined) {
+    validated.fillOpacity = clamp(validated.fillOpacity, VALIDATION.fillOpacity.min, VALIDATION.fillOpacity.max);
+  }
+  if (validated.strokeWidth !== undefined) {
+    validated.strokeWidth = clamp(validated.strokeWidth, VALIDATION.strokeWidth.min, VALIDATION.strokeWidth.max);
+  }
+
+  if (validated.mouse) {
+    if (validated.mouse.radius !== undefined) {
+      validated.mouse.radius = clamp(validated.mouse.radius, VALIDATION.radius.min, VALIDATION.radius.max);
+    }
+    if (validated.mouse.strength !== undefined) {
+      validated.mouse.strength = clamp(validated.mouse.strength, VALIDATION.strength.min, VALIDATION.strength.max);
+    }
+    if (validated.mouse.springBack !== undefined) {
+      validated.mouse.springBack = clamp(validated.mouse.springBack, VALIDATION.springBack.min, VALIDATION.springBack.max);
+    }
+    if (validated.mouse.velocityInfluence !== undefined) {
+      validated.mouse.velocityInfluence = clamp(validated.mouse.velocityInfluence, VALIDATION.velocityInfluence.min, VALIDATION.velocityInfluence.max);
+    }
+  }
+
+  if (validated.height) {
+    if (validated.height.noiseScale !== undefined) {
+      validated.height.noiseScale = clamp(validated.height.noiseScale, VALIDATION.noiseScale.min, VALIDATION.noiseScale.max);
+    }
+    if (validated.height.intensity !== undefined) {
+      validated.height.intensity = clamp(validated.height.intensity, VALIDATION.intensity.min, VALIDATION.intensity.max);
+    }
+    if (validated.height.centerFalloff !== undefined) {
+      validated.height.centerFalloff = clamp(validated.height.centerFalloff, VALIDATION.centerFalloff.min, VALIDATION.centerFalloff.max);
+    }
+  }
+
+  if (validated.transition) {
+    if (validated.transition.duration !== undefined) {
+      validated.transition.duration = clamp(validated.transition.duration, VALIDATION.duration.min, VALIDATION.duration.max);
+    }
+  }
+
+  if (validated.performance) {
+    if (validated.performance.targetFPS !== undefined) {
+      validated.performance.targetFPS = clamp(validated.performance.targetFPS, VALIDATION.targetFPS.min, VALIDATION.targetFPS.max);
+    }
+  }
+
+  return validated;
+}
+
+/**
  * Default configuration values
  */
 export const DEFAULT_OPTIONS: ResolvedOptions = {

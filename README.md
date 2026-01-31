@@ -133,6 +133,8 @@ The library can be used to create stunning backgrounds for any UI component:
 
 ## Configuration
 
+All configuration values are automatically validated and clamped to safe ranges.
+
 ```typescript
 const bg = new PolygonBackground(container, {
   // Theme
@@ -302,6 +304,40 @@ const bg = new PolygonBackground(container, {
 | `pointColor` | string | Vertex dot color |
 | `pointSize` | number | Vertex dot size |
 | `fillOpacity` | number | Triangle fill opacity (0-1) |
+
+### Validation Ranges
+
+| Option | Min | Max |
+|--------|-----|-----|
+| `pointCount` | 3 | 10000 |
+| `pointSize` | 0.1 | 50 |
+| `speed` | 0 | 10 |
+| `fillOpacity` | 0 | 1 |
+| `strokeWidth` | 0 | 10 |
+| `mouse.radius` | 1 | 2000 |
+| `mouse.strength` | 0 | 500 |
+| `mouse.springBack` | 0 | 1 |
+| `mouse.velocityInfluence` | 0 | 2 |
+| `height.noiseScale` | 0.0001 | 1 |
+| `height.intensity` | 0 | 2 |
+| `height.centerFalloff` | 0 | 1 |
+| `transition.duration` | 0 | 10000 |
+| `performance.targetFPS` | 0 | 240 |
+
+## Architecture
+
+The library uses a hybrid TypeScript/WebAssembly architecture for optimal performance:
+
+- **Physics Simulation** - Rust/WASM handles point movement, mouse interactions, shockwaves, and Delaunay triangulation
+- **Rendering** - WebGL2 with instanced rendering for triangles, strokes, and points
+- **Input Validation** - All configuration values are automatically clamped to valid ranges
+
+### Performance Optimizations
+
+- Combined physics + triangulation in single WASM call to minimize JS-WASM boundary crossings
+- Squared distance calculations where possible to avoid unnecessary sqrt() operations
+- Pre-allocated vertex buffers to reduce memory allocations
+- Instanced rendering for efficient GPU utilization
 
 ## Development
 
