@@ -236,17 +236,72 @@ bg.setGravityWell(x, y, active, attract?);  // control gravity well
 
 ### Custom Themes
 
-```typescript
-import { createTheme } from 'polygon-background';
+#### Option 1: Extend an existing theme
 
-const customTheme = createTheme('midnight', {
-  gradientStart: '#ff0000',
-  gradientEnd: '#0000ff',
-  backgroundColor: '#000000',
+```typescript
+import { PolygonBackground, createTheme } from 'polygon-background';
+
+// Create a custom theme based on midnight
+const myTheme = createTheme('midnight', {
+  gradientStart: '#ff0066',
+  gradientEnd: '#6600ff',
+  backgroundColor: '#0a0010',
+  lightColor: '#ff66aa',
+  pointColor: 'rgba(255, 102, 170, 0.6)',
 });
 
-bg.setTheme(customTheme);
+const bg = new PolygonBackground(container, {
+  theme: myTheme,
+});
 ```
+
+#### Option 2: Create a full theme from scratch
+
+```typescript
+import { PolygonBackground, ThemeDefinition } from 'polygon-background';
+
+const customTheme: ThemeDefinition = {
+  name: 'Neon',
+  gradientStart: '#00ffff',
+  gradientEnd: '#ff00ff',
+  backgroundColor: '#000011',
+  strokeColor: 'rgba(0, 255, 255, 0.3)',
+  strokeWidth: 0.5,
+  lightColor: '#00ffff',
+  shadowColor: '#110022',
+  lightPosition: { x: 0.5, y: 0.2 },
+  shadowIntensity: 0.7,
+  highlightIntensity: 0.6,
+  ambientLight: 0.2,
+  pointColor: 'rgba(0, 255, 255, 0.5)',
+  pointSize: 1.5,
+  fillOpacity: 0.85,
+};
+
+const bg = new PolygonBackground(container, {
+  theme: customTheme,
+});
+```
+
+#### Theme Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | string | Display name |
+| `gradientStart` | string | Top/left gradient color |
+| `gradientEnd` | string | Bottom/right gradient color |
+| `backgroundColor` | string | Canvas background |
+| `strokeColor` | string | Line color (with opacity) |
+| `strokeWidth` | number | Line thickness |
+| `lightColor` | string | Highlight color |
+| `shadowColor` | string | Shadow color |
+| `lightPosition` | {x, y} | Light source (0-1 normalized) |
+| `shadowIntensity` | number | Shadow strength (0-1) |
+| `highlightIntensity` | number | Highlight strength (0-1) |
+| `ambientLight` | number | Minimum brightness (0-1) |
+| `pointColor` | string | Vertex dot color |
+| `pointSize` | number | Vertex dot size |
+| `fillOpacity` | number | Triangle fill opacity (0-1) |
 
 ## Development
 
