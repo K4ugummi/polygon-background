@@ -4,3 +4,9 @@ dist/
 .DS_Store
 wasm/target/
 wasm/pkg/
+
+# Angular cache and build
+.angular/
+
+# Claude Code
+.claude/
