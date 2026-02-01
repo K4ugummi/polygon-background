@@ -1,6 +1,6 @@
 {
   "name": "polygon-background",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Beautiful, animated polygon mesh backgrounds for web apps. WebGL + WASM powered, 60fps smooth, 5 themes, mouse-interactive. Works with React, Vue, Angular, or vanilla JS.",
   "type": "module",
   "main": "./dist/polygon-background.js",
@@ -55,11 +55,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {
-    "delaunator": "^5.0.1"
-  },
   "devDependencies": {
-    "@types/delaunator": "^5.0.3",
     "puppeteer": "^24.36.1",
     "typescript": "^5.3.3",
     "vite": "^5.4.11",
