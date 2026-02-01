@@ -2,7 +2,8 @@
 
 Beautiful, animated polygon backgrounds for web applications. Built with WebGL and WebAssembly for smooth 60fps performance.
 
-![Polygon Background Demo](public/home.png)
+![Polygon Background Demo](public/PolygonBackground.gif)
+![Polygon Background Interactive](public/PolygonBackground2.gif)
 
 ## Features
 
@@ -122,14 +123,7 @@ See `examples/` for complete working demos with theme switching and interactive 
 
 The library can be used to create stunning backgrounds for any UI component:
 
-### Login Card
-![Login Card](public/login-card.png)
-
-### Toolbar
-![Toolbar](public/toolbar.png)
-
-### Dialog
-![Dialog](public/dialog.png)
+![Polygon Background Interactive](public/PolygonBackground3.gif)
 
 ## Configuration
 
