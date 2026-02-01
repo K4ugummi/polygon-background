@@ -1,3 +1,8 @@
+/**
+ * Animated polygon background component using Delaunay triangulation
+ * with 3D-like lighting and topography
+ */
+
 import type {
   PolygonBackgroundOptions,
   ResolvedOptions,
@@ -18,62 +23,27 @@ import {
   DEFAULT_PERFORMANCE,
   validateOptions,
 } from './types';
-import {
-  getTheme,
-  interpolateThemes,
-  type ThemeDefinition,
-} from './themes';
-import { WebGLRenderer } from './webgl/WebGLRenderer';
-import type { RenderData } from './webgl/WebGLRenderer';
+import { getTheme, type ThemeDefinition } from './themes';
+import { WebGLRenderer, type RenderData } from './webgl/WebGLRenderer';
 import { initWasm, WasmSimulation } from './WasmSimulation';
+import { MouseHandler } from './events/MouseHandler';
+import { ResizeHandler } from './events/ResizeHandler';
+import { AnimationLoop } from './animation/AnimationLoop';
+import { ThemeTransition } from './animation/ThemeTransition';
+import { FPSDisplay } from './animation/FPSDisplay';
 
-/**
- * Animated polygon background component using Delaunay triangulation
- * with 3D-like lighting and topography
- */
 export class PolygonBackground {
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private renderer: WebGLRenderer;
   private options: ResolvedOptions;
-  private animationId: number | null = null;
-  private paused: boolean = false;
-  private running: boolean = false;
-  private resizeObserver: ResizeObserver | null = null;
-  private boundResizeHandler: () => void;
 
-
-  // Mouse tracking
-  private mouseX: number = 0;
-  private mouseY: number = 0;
-  private mouseInCanvas: boolean = false;
-  private boundMouseMoveHandler: (e: MouseEvent) => void;
-  private boundMouseEnterHandler: () => void;
-  private boundMouseLeaveHandler: () => void;
-  private boundMouseDownHandler: (e: MouseEvent) => void;
-  private boundMouseUpHandler: (e: MouseEvent) => void;
-  private boundClickHandler: (e: MouseEvent) => void;
-
-  // Gravity well state
-  private gravityWellActive: boolean = false;
-  private holdTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  // Theme transition
-  private currentTheme: ThemeDefinition;
-  private targetTheme: ThemeDefinition | null = null;
-  private transitionStartTime: number = 0;
-  private transitionProgress: number = 1;
-
-  // FPS tracking
-  private lastFrameTime: number = 0;
-  private frameCount: number = 0;
-  private fps: number = 0;
-  private fpsUpdateTime: number = 0;
-  private fpsElement: HTMLDivElement | null = null;
-
-  // Delta time for frame-independent animation
-  private lastUpdateTime: number = 0;
-  private readonly TARGET_FRAME_TIME: number = 1000 / 60; // 60fps baseline (~16.67ms)
+  // Handlers
+  private mouseHandler: MouseHandler;
+  private resizeHandler: ResizeHandler;
+  private animationLoop: AnimationLoop;
+  private themeTransition: ThemeTransition;
+  private fpsDisplay: FPSDisplay;
 
   // WASM simulation
   private wasmSimulation: WasmSimulation | null = null;
@@ -88,59 +58,60 @@ export class PolygonBackground {
   constructor(container: HTMLElement, options?: PolygonBackgroundOptions) {
     this.container = container;
 
-    // Resolve theme first
-    // Validate options before processing
+    // Validate and resolve options
     const validatedOptions = options ? validateOptions(options) : undefined;
-
     const themeName = validatedOptions?.theme || DEFAULT_OPTIONS.theme;
-    this.currentTheme = getTheme(themeName);
+    const initialTheme = getTheme(themeName);
 
-    // Merge options with theme defaults
-    this.options = this.resolveOptions(validatedOptions);
+    this.options = this.resolveOptions(validatedOptions, initialTheme);
 
-    // Create canvas element
-    this.canvas = document.createElement('canvas');
-    this.canvas.style.position = 'absolute';
-    this.canvas.style.top = '0';
-    this.canvas.style.left = '0';
-    this.canvas.style.width = '100%';
-    this.canvas.style.height = '100%';
-    this.canvas.style.zIndex = '0';
-    this.canvas.style.pointerEvents = 'none';
+    // Create canvas
+    this.canvas = this.createCanvas();
+    this.setupContainer();
+    this.container.insertBefore(this.canvas, this.container.firstChild);
 
     // Create WebGL renderer
     this.renderer = new WebGLRenderer(this.canvas);
 
-    // Ensure container has positioning for absolute canvas
-    const containerStyle = window.getComputedStyle(this.container);
-    if (containerStyle.position === 'static') {
-      this.container.style.position = 'relative';
-    }
+    // Create handlers
+    this.mouseHandler = new MouseHandler(
+      container,
+      this.options.interaction,
+      {
+        onShockwave: (x, y) => this.triggerShockwave(x, y),
+        onGravityWellStart: (x, y, attract) => {
+          this.wasmSimulation?.setGravityWell(x, y, true, attract);
+        },
+        onGravityWellEnd: () => {
+          this.wasmSimulation?.setGravityWell(0, 0, false, false);
+        },
+      }
+    );
 
-    // Add canvas to container
-    this.container.insertBefore(this.canvas, this.container.firstChild);
+    this.resizeHandler = new ResizeHandler(
+      container,
+      this.options.responsive,
+      {
+        onResize: () => this.handleResize(),
+      }
+    );
 
-    // Set up resize handling
-    this.boundResizeHandler = this.handleResize.bind(this);
-    if (this.options.responsive) {
-      this.setupResizeObserver();
-    }
+    this.themeTransition = new ThemeTransition(initialTheme, this.options.transition);
 
-    // Set up mouse handlers
-    this.boundMouseMoveHandler = this.handleMouseMove.bind(this);
-    this.boundMouseEnterHandler = this.handleMouseEnter.bind(this);
-    this.boundMouseLeaveHandler = this.handleMouseLeave.bind(this);
-    this.boundMouseDownHandler = this.handleMouseDown.bind(this);
-    this.boundMouseUpHandler = this.handleMouseUp.bind(this);
-    this.boundClickHandler = this.handleClick.bind(this);
-    this.setupMouseListeners();
+    this.fpsDisplay = new FPSDisplay(container);
+
+    this.animationLoop = new AnimationLoop(
+      this.options.performance,
+      {
+        onUpdate: (deltaTime) => this.update(deltaTime),
+        onRender: () => this.render(),
+      }
+    );
 
     // Initial setup
     this.updateCanvasSize();
 
-    // Initialize time
-    
-    // Initialize WASM, then start (unless already destroyed)
+    // Initialize WASM, then start
     this.initializeWasm().then(() => {
       if (!this.destroyed) {
         this.start();
@@ -148,9 +119,27 @@ export class PolygonBackground {
     });
   }
 
-  /**
-   * Initialize WASM simulation
-   */
+  // ========== Initialization ==========
+
+  private createCanvas(): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.zIndex = '0';
+    canvas.style.pointerEvents = 'none';
+    return canvas;
+  }
+
+  private setupContainer(): void {
+    const containerStyle = window.getComputedStyle(this.container);
+    if (containerStyle.position === 'static') {
+      this.container.style.position = 'relative';
+    }
+  }
+
   private async initializeWasm(): Promise<void> {
     const available = await initWasm();
     if (!available) {
@@ -160,7 +149,8 @@ export class PolygonBackground {
     // Wait for container to have valid dimensions
     let rect = this.container.getBoundingClientRect();
     let attempts = 0;
-    const maxAttempts = 20; // ~1 second max wait
+    const maxAttempts = 20;
+
     while ((rect.width === 0 || rect.height === 0) && attempts < maxAttempts) {
       await new Promise((resolve) => setTimeout(resolve, 50));
       if (this.destroyed) return;
@@ -168,15 +158,10 @@ export class PolygonBackground {
       attempts++;
     }
 
-    // Use minimum dimensions if still zero to avoid initialization errors
     const width = Math.max(rect.width, 1);
     const height = Math.max(rect.height, 1);
 
-    this.wasmSimulation = new WasmSimulation(
-      width,
-      height,
-      this.options.pointCount
-    );
+    this.wasmSimulation = new WasmSimulation(width, height, this.options.pointCount);
     this.wasmSimulation.setNoiseParams(
       this.options.height.noiseScale,
       this.options.height.intensity
@@ -184,25 +169,10 @@ export class PolygonBackground {
     this.updatePhysicsParams();
   }
 
-  /**
-   * Update physics parameters in WASM
-   */
-  private updatePhysicsParams(): void {
-    if (!this.wasmSimulation) return;
-
-    this.wasmSimulation.setPhysicsParams(
-      this.options.mouse.springBack,
-      0.85, // damping constant
-      this.options.mouse.velocityInfluence
-    );
-  }
-
-  /**
-   * Resolve options by merging theme, defaults, and user options
-   */
-  private resolveOptions(options?: PolygonBackgroundOptions): ResolvedOptions {
-    const theme = this.currentTheme;
-
+  private resolveOptions(
+    options: PolygonBackgroundOptions | undefined,
+    theme: ThemeDefinition
+  ): ResolvedOptions {
     return {
       pointCount: options?.pointCount ?? DEFAULT_OPTIONS.pointCount,
       pointSize: options?.pointSize ?? theme.pointSize,
@@ -218,310 +188,84 @@ export class PolygonBackground {
       theme: options?.theme ?? DEFAULT_OPTIONS.theme,
       light: {
         ...DEFAULT_LIGHT,
-        ...theme.lightPosition && { position: theme.lightPosition },
+        ...(theme.lightPosition && { position: theme.lightPosition }),
         color: theme.lightColor,
         ...options?.light,
       },
-      mouse: {
-        ...DEFAULT_MOUSE,
-        ...options?.mouse,
-      },
-      interaction: {
-        ...DEFAULT_INTERACTION,
-        ...options?.interaction,
-      },
-      height: {
-        ...DEFAULT_HEIGHT,
-        ...options?.height,
-      },
-      transition: {
-        ...DEFAULT_TRANSITION,
-        ...options?.transition,
-      },
-      performance: {
-        ...DEFAULT_PERFORMANCE,
-        ...options?.performance,
-      },
+      mouse: { ...DEFAULT_MOUSE, ...options?.mouse },
+      interaction: { ...DEFAULT_INTERACTION, ...options?.interaction },
+      height: { ...DEFAULT_HEIGHT, ...options?.height },
+      transition: { ...DEFAULT_TRANSITION, ...options?.transition },
+      performance: { ...DEFAULT_PERFORMANCE, ...options?.performance },
     };
   }
 
-  /**
-   * Set up mouse event listeners
-   */
-  private setupMouseListeners(): void {
-    // Listen on window for smooth tracking even when container has z-index: -1
-    window.addEventListener('mousemove', this.boundMouseMoveHandler);
-    this.container.addEventListener('mouseenter', this.boundMouseEnterHandler);
-    this.container.addEventListener('mouseleave', this.boundMouseLeaveHandler);
-    window.addEventListener('mousedown', this.boundMouseDownHandler);
-    window.addEventListener('mouseup', this.boundMouseUpHandler);
-    window.addEventListener('click', this.boundClickHandler);
-  }
+  // ========== Update & Render ==========
 
-  /**
-   * Remove mouse event listeners
-   */
-  private removeMouseListeners(): void {
-    window.removeEventListener('mousemove', this.boundMouseMoveHandler);
-    this.container.removeEventListener('mouseenter', this.boundMouseEnterHandler);
-    this.container.removeEventListener('mouseleave', this.boundMouseLeaveHandler);
-    window.removeEventListener('mousedown', this.boundMouseDownHandler);
-    window.removeEventListener('mouseup', this.boundMouseUpHandler);
-    window.removeEventListener('click', this.boundClickHandler);
-  }
-
-  /**
-   * Handle mouse movement
-   */
-  private handleMouseMove(e: MouseEvent): void {
-    const rect = this.container.getBoundingClientRect();
-    this.mouseX = e.clientX - rect.left;
-    this.mouseY = e.clientY - rect.top;
-
-    // Check if mouse is within container bounds (works even with z-index: -1)
-    this.mouseInCanvas =
-      this.mouseX >= 0 &&
-      this.mouseX <= rect.width &&
-      this.mouseY >= 0 &&
-      this.mouseY <= rect.height;
-  }
-
-  /**
-   * Handle mouse entering container
-   */
-  private handleMouseEnter(): void {
-    this.mouseInCanvas = true;
-  }
-
-  /**
-   * Handle mouse leaving container
-   */
-  private handleMouseLeave(): void {
-    this.mouseInCanvas = false;
-  }
-
-  /**
-   * Handle mouse down - start gravity well after delay
-   */
-  private handleMouseDown(e: MouseEvent): void {
-    if (!this.options.interaction.holdGravityWell) return;
-    if (!this.mouseInCanvas) return;
-
-    const rect = this.container.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    // Start gravity well after short delay (150ms hold)
-    this.holdTimeout = setTimeout(() => {
-      this.gravityWellActive = true;
-      if (this.wasmSimulation) {
-        this.wasmSimulation.setGravityWell(
-          x,
-          y,
-          true,
-          this.options.interaction.gravityWellAttract
-        );
-      }
-    }, 150);
-  }
-
-  /**
-   * Handle mouse up - stop gravity well
-   */
-  private handleMouseUp(): void {
-    if (this.holdTimeout) {
-      clearTimeout(this.holdTimeout);
-      this.holdTimeout = null;
-    }
-
-    if (this.gravityWellActive && this.wasmSimulation) {
-      this.wasmSimulation.setGravityWell(0, 0, false, false);
-      this.gravityWellActive = false;
-    }
-  }
-
-  /**
-   * Handle click - trigger shockwave
-   */
-  private handleClick(e: MouseEvent): void {
-    if (!this.options.interaction.clickShockwave) return;
-    if (!this.mouseInCanvas) return;
-
-    const rect = this.container.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    this.triggerShockwave(x, y);
-  }
-
-  /**
-   * Set up ResizeObserver for responsive canvas
-   */
-  private setupResizeObserver(): void {
-    this.resizeObserver = new ResizeObserver(this.boundResizeHandler);
-    this.resizeObserver.observe(this.container);
-  }
-
-  /**
-   * Handle container resize
-   */
-  private handleResize(): void {
-    this.updateCanvasSize();
-
-    const rect = this.container.getBoundingClientRect();
-
-    // Update WASM simulation size
-    if (this.wasmSimulation) {
-      this.wasmSimulation.resize(rect.width, rect.height);
-    }
-
-    // Optionally adjust point count based on size
-    if (this.options.scalePointsWithSize) {
-      const targetCount = Math.floor(
-        (rect.width * rect.height * this.options.pointsPerPixel) / 100
-      );
-      this.adjustPointCount(targetCount);
-    }
-  }
-
-  /**
-   * Update canvas size to match container
-   */
-  private updateCanvasSize(): void {
-    const rect = this.container.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-
-    const newWidth = rect.width * dpr;
-    const newHeight = rect.height * dpr;
-
-    // Cache dimensions for use in render loop
-    this.cachedWidth = rect.width;
-    this.cachedHeight = rect.height;
-
-    // Only resize if dimensions actually changed
-    if (this.canvas.width === newWidth && this.canvas.height === newHeight) {
-      return;
-    }
-
-    this.canvas.width = newWidth;
-    this.canvas.height = newHeight;
-
-    // Update WebGL viewport
-    this.renderer.resize(newWidth, newHeight);
-  }
-
-  /**
-   * Adjust the number of points (add or remove)
-   */
-  private adjustPointCount(targetCount: number): void {
-    if (this.wasmSimulation) {
-      this.wasmSimulation.setPointCount(targetCount);
-    }
-  }
-
-  /**
-   * Update WASM simulation using combined tick() for fewer boundary crossings
-   */
-  private updateWasm(deltaTime: number): void {
+  private update(deltaTime: number): void {
     if (!this.wasmSimulation) return;
 
-    // Use cached dimensions
-    const width = this.cachedWidth;
-    const height = this.cachedHeight;
-
-    const {
-      enabled: mouseEnabled,
-      radius,
-      radiusUnit,
-      strength,
-      mode,
-    } = this.options.mouse;
-
-    // Calculate mouse radius in pixels
-    const mouseRadius = radiusUnit === 'percent'
-      ? Math.min(width, height) * (radius / 100)
-      : radius;
-
-    // Convert mode string to number
-    const modeNum = mode === 'pull' ? 1 : mode === 'swirl' ? 2 : 0;
-
-    // Update gravity well position if active (separate call needed)
-    if (this.gravityWellActive) {
-      this.wasmSimulation.updateGravityWellPosition(this.mouseX, this.mouseY);
+    // Update theme transition
+    if (this.themeTransition.update()) {
+      this.applyThemeToOptions(this.themeTransition.theme);
     }
 
-    // Combined tick: mouse state + physics + triangulation in single WASM call
+    // Update gravity well position if active
+    if (this.mouseHandler.isGravityWellActive) {
+      this.wasmSimulation.updateGravityWellPosition(
+        this.mouseHandler.mouseX,
+        this.mouseHandler.mouseY
+      );
+    }
+
+    // Update WASM simulation
+    const { enabled, radius, radiusUnit, strength, mode } = this.options.mouse;
+    const mouseRadius =
+      radiusUnit === 'percent'
+        ? Math.min(this.cachedWidth, this.cachedHeight) * (radius / 100)
+        : radius;
+    const modeNum = mode === 'pull' ? 1 : mode === 'swirl' ? 2 : 0;
+
     this.wasmSimulation.tick(
       deltaTime,
       this.options.speed,
-      this.mouseX,
-      this.mouseY,
-      mouseEnabled && this.mouseInCanvas,
+      this.mouseHandler.mouseX,
+      this.mouseHandler.mouseY,
+      enabled && this.mouseHandler.mouseInCanvas,
       mouseRadius,
       strength,
       modeNum
     );
   }
 
-  /**
-   * Get current effective theme (considering transitions)
-   */
-  private getEffectiveTheme(): ThemeDefinition {
-    if (this.targetTheme && this.transitionProgress < 1) {
-      return interpolateThemes(
-        this.currentTheme,
-        this.targetTheme,
-        this.easeInOutCubic(this.transitionProgress)
-      );
-    }
-    return this.currentTheme;
-  }
-
-  /**
-   * Easing function for smooth transitions
-   */
-  private easeInOutCubic(t: number): number {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  }
-
-  /**
-   * Render the current frame
-   */
   private render(): void {
     if (!this.wasmSimulation || this.destroyed) return;
+    if (this.cachedWidth === 0 || this.cachedHeight === 0) return;
 
-    // Use cached dimensions to avoid layout thrashing
-    const width = this.cachedWidth;
-    const height = this.cachedHeight;
-
-    if (width === 0 || height === 0) return;
-
-    const theme = this.getEffectiveTheme();
+    const theme = this.themeTransition.getEffectiveTheme();
 
     // Calculate light position
     let lightX: number, lightY: number;
-    if (this.options.light.mode === 'mouse' && this.mouseInCanvas) {
-      lightX = this.mouseX;
-      lightY = this.mouseY;
+    if (this.options.light.mode === 'mouse' && this.mouseHandler.mouseInCanvas) {
+      lightX = this.mouseHandler.mouseX;
+      lightY = this.mouseHandler.mouseY;
     } else {
-      lightX = this.options.light.position.x * width;
-      lightY = this.options.light.position.y * height;
+      lightX = this.options.light.position.x * this.cachedWidth;
+      lightY = this.options.light.position.y * this.cachedHeight;
     }
 
-    // Get vertex data from WASM (already triangulated in updateWasm)
-    const wasmRenderData: RenderData = {
+    const renderData: RenderData = {
       triangleVertices: this.wasmSimulation.get_triangle_vertices(),
       strokeVertices: this.wasmSimulation.get_stroke_vertices(),
       pointVertices: this.wasmSimulation.get_point_vertices(),
       triangleCount: this.wasmSimulation.get_triangle_count(),
       strokeVertexCount: this.wasmSimulation.get_stroke_vertex_count(),
       pointCount: this.wasmSimulation.get_point_count(),
-      width,
-      height,
+      width: this.cachedWidth,
+      height: this.cachedHeight,
       lightX,
       lightY,
       theme,
-      // Pass user-adjustable options
       strokeWidth: this.options.strokeWidth,
       pointSize: this.options.pointSize,
       fillOpacity: this.options.fillOpacity,
@@ -530,207 +274,63 @@ export class PolygonBackground {
       backgroundColor: this.options.backgroundColor,
     };
 
-    this.renderer.render(wasmRenderData);
+    this.renderer.render(renderData);
+
+    // Update FPS display
+    this.fpsDisplay.update(
+      this.animationLoop.currentFPS,
+      this.options.performance.showFPS
+    );
   }
 
-  /**
-   * Animation loop
-   */
-  private animate = (): void => {
-    if (!this.running || this.destroyed) return;
+  // ========== Resize Handling ==========
 
-    const now = performance.now();
+  private handleResize(): void {
+    this.updateCanvasSize();
 
-    // Frame rate limiting
-    const { targetFPS } = this.options.performance;
-    if (targetFPS > 0) {
-      const frameInterval = 1000 / targetFPS;
-      const elapsed = now - this.lastFrameTime;
-      if (elapsed < frameInterval) {
-        this.animationId = requestAnimationFrame(this.animate);
-        return;
-      }
-      // Adjust for drift
-      this.lastFrameTime = now - (elapsed % frameInterval);
-    } else {
-      this.lastFrameTime = now;
-    }
-
-    // FPS tracking
-    this.frameCount++;
-    if (now - this.fpsUpdateTime >= 1000) {
-      this.fps = this.frameCount;
-      this.frameCount = 0;
-      this.fpsUpdateTime = now;
-    }
-
-    // Update theme transition
-    if (this.targetTheme && this.transitionProgress < 1) {
-      const transitionElapsed = now - this.transitionStartTime;
-      this.transitionProgress = Math.min(1, transitionElapsed / this.options.transition.duration);
-
-      // During transition, interpolate options
-      const effectiveTheme = this.getEffectiveTheme();
-      this.applyThemeToOptions(effectiveTheme);
-
-      if (this.transitionProgress >= 1) {
-        this.currentTheme = this.targetTheme;
-        this.applyThemeToOptions(this.currentTheme);
-        this.targetTheme = null;
-      }
-    }
-
-    if (!this.paused) {
-      // Calculate delta time normalized to 60fps baseline
-      // deltaTime = 1.0 at 60fps, 2.0 at 30fps, 0.5 at 120fps, etc.
-      const rawDeltaTime = this.lastUpdateTime > 0 ? now - this.lastUpdateTime : this.TARGET_FRAME_TIME;
-      const deltaTime = rawDeltaTime / this.TARGET_FRAME_TIME;
-      this.lastUpdateTime = now;
-
-      this.updateWasm(deltaTime);
-    }
-
-    this.render();
-
-    // Draw FPS counter if enabled
-    if (this.options.performance.showFPS) {
-      this.renderFPS();
-    }
-
-    this.animationId = requestAnimationFrame(this.animate);
-  };
-
-  /**
-   * Render FPS counter using HTML overlay
-   */
-  private renderFPS(): void {
-    if (!this.fpsElement) {
-      this.fpsElement = document.createElement('div');
-      this.fpsElement.style.position = 'absolute';
-      this.fpsElement.style.top = '10px';
-      this.fpsElement.style.left = '10px';
-      this.fpsElement.style.color = 'rgba(255, 255, 255, 0.7)';
-      this.fpsElement.style.font = '12px monospace';
-      this.fpsElement.style.pointerEvents = 'none';
-      this.fpsElement.style.zIndex = '1';
-      this.container.appendChild(this.fpsElement);
-    }
-    this.fpsElement.textContent = `${this.fps} FPS`;
-  }
-
-  /**
-   * Remove FPS counter element
-   */
-  private removeFPSElement(): void {
-    if (this.fpsElement && this.fpsElement.parentNode) {
-      this.fpsElement.parentNode.removeChild(this.fpsElement);
-      this.fpsElement = null;
-    }
-  }
-
-  /**
-   * Start the animation
-   */
-  start(): void {
-    if (this.running || this.destroyed) return;
-    this.running = true;
-    this.paused = false;
-        this.lastUpdateTime = 0; // Reset to avoid delta time jump
-    this.animate();
-  }
-
-  /**
-   * Stop the animation completely
-   */
-  stop(): void {
-    this.running = false;
-    this.paused = false;
-    if (this.animationId !== null) {
-      cancelAnimationFrame(this.animationId);
-      this.animationId = null;
-    }
-  }
-
-  /**
-   * Pause the animation (keeps rendering but stops movement)
-   */
-  pause(): void {
-    this.paused = true;
-  }
-
-  /**
-   * Resume the animation from pause
-   */
-  resume(): void {
-    this.paused = false;
-    this.lastUpdateTime = 0; // Reset to avoid delta time jump after pause
-  }
-
-  /**
-   * Clean up and remove the component
-   */
-  destroy(): void {
-    this.destroyed = true;
-    this.stop();
-
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-
-    this.removeMouseListeners();
-    this.removeFPSElement();
-
-    // Dispose WASM simulation
     if (this.wasmSimulation) {
-      this.wasmSimulation.dispose();
-      this.wasmSimulation = null;
+      const rect = this.container.getBoundingClientRect();
+      this.wasmSimulation.resize(rect.width, rect.height);
     }
 
-    // Dispose WebGL resources
-    this.renderer.dispose();
-
-    if (this.canvas.parentNode) {
-      this.canvas.parentNode.removeChild(this.canvas);
+    if (this.options.scalePointsWithSize) {
+      const rect = this.container.getBoundingClientRect();
+      const targetCount = Math.floor(
+        (rect.width * rect.height * this.options.pointsPerPixel) / 100
+      );
+      this.wasmSimulation?.setPointCount(targetCount);
     }
   }
 
-  /**
-   * Check if animation is paused
-   */
-  isPaused(): boolean {
-    return this.paused;
-  }
+  private updateCanvasSize(): void {
+    const rect = this.container.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
 
-  /**
-   * Check if animation is running
-   */
-  isRunning(): boolean {
-    return this.running;
-  }
+    const newWidth = rect.width * dpr;
+    const newHeight = rect.height * dpr;
 
-  /**
-   * Set theme by name or custom theme definition
-   */
-  setTheme(theme: string | ThemeDefinition): void {
-    const newTheme = typeof theme === 'string' ? getTheme(theme) : theme;
+    this.cachedWidth = rect.width;
+    this.cachedHeight = rect.height;
 
-    if (this.options.transition.enabled) {
-      this.targetTheme = newTheme;
-      this.transitionStartTime = performance.now();
-      this.transitionProgress = 0;
-    } else {
-      this.currentTheme = newTheme;
-      // Update options with new theme values
-      this.applyThemeToOptions(newTheme);
+    if (this.canvas.width === newWidth && this.canvas.height === newHeight) {
+      return;
     }
 
-    this.options.theme = typeof theme === 'string' ? theme : 'custom';
+    this.canvas.width = newWidth;
+    this.canvas.height = newHeight;
+    this.renderer.resize(newWidth, newHeight);
   }
 
-  /**
-   * Apply theme values to options
-   */
+  // ========== Physics ==========
+
+  private updatePhysicsParams(): void {
+    this.wasmSimulation?.setPhysicsParams(
+      this.options.mouse.springBack,
+      0.85,
+      this.options.mouse.velocityInfluence
+    );
+  }
+
   private applyThemeToOptions(theme: ThemeDefinition): void {
     this.options.pointSize = theme.pointSize;
     this.options.pointColor = theme.pointColor;
@@ -741,28 +341,83 @@ export class PolygonBackground {
     this.options.light.position = { ...theme.lightPosition };
   }
 
-  /**
-   * Update an option at runtime
-   */
-  setOption<K extends keyof ResolvedOptions>(
-    key: K,
-    value: ResolvedOptions[K]
-  ): void {
+  // ========== Public API: Animation Control ==========
+
+  start(): void {
+    if (this.destroyed) return;
+    this.animationLoop.start();
+  }
+
+  stop(): void {
+    this.animationLoop.stop();
+  }
+
+  pause(): void {
+    this.animationLoop.pause();
+  }
+
+  resume(): void {
+    this.animationLoop.resume();
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    this.animationLoop.stop();
+    this.mouseHandler.dispose();
+    this.resizeHandler.dispose();
+    this.fpsDisplay.dispose();
+
+    if (this.wasmSimulation) {
+      this.wasmSimulation.dispose();
+      this.wasmSimulation = null;
+    }
+
+    this.renderer.dispose();
+
+    if (this.canvas.parentNode) {
+      this.canvas.parentNode.removeChild(this.canvas);
+    }
+  }
+
+  // ========== Public API: State Queries ==========
+
+  isPaused(): boolean {
+    return this.animationLoop.isPaused;
+  }
+
+  isRunning(): boolean {
+    return this.animationLoop.isRunning;
+  }
+
+  getFPS(): number {
+    return this.animationLoop.currentFPS;
+  }
+
+  getTheme(): ThemeDefinition {
+    return this.themeTransition.getEffectiveTheme();
+  }
+
+  getOption<K extends keyof ResolvedOptions>(key: K): ResolvedOptions[K] {
+    return this.options[key];
+  }
+
+  // ========== Public API: Configuration ==========
+
+  setTheme(theme: string | ThemeDefinition): void {
+    this.themeTransition.setTheme(theme);
+    this.options.theme = typeof theme === 'string' ? theme : 'custom';
+  }
+
+  setOption<K extends keyof ResolvedOptions>(key: K, value: ResolvedOptions[K]): void {
     const oldValue = this.options[key];
     this.options[key] = value;
 
-    // Handle special cases
     if (key === 'pointCount' && value !== oldValue) {
-      this.adjustPointCount(value as number);
+      this.wasmSimulation?.setPointCount(value as number);
     }
 
     if (key === 'responsive') {
-      if (value && !this.resizeObserver) {
-        this.setupResizeObserver();
-      } else if (!value && this.resizeObserver) {
-        this.resizeObserver.disconnect();
-        this.resizeObserver = null;
-      }
+      this.resizeHandler.setEnabled(value as boolean);
     }
 
     if (key === 'theme') {
@@ -770,106 +425,60 @@ export class PolygonBackground {
     }
   }
 
-  /**
-   * Update light configuration
-   */
   setLightConfig(config: Partial<LightConfig>): void {
     this.options.light = { ...this.options.light, ...config };
   }
 
-  /**
-   * Update mouse configuration
-   */
   setMouseConfig(config: Partial<MouseConfig>): void {
     this.options.mouse = { ...this.options.mouse, ...config };
 
-    // Update physics params if they changed
     if (config.springBack !== undefined || config.velocityInfluence !== undefined) {
       this.updatePhysicsParams();
     }
   }
 
-  /**
-   * Update height/topography configuration
-   */
   setHeightConfig(config: Partial<HeightConfig>): void {
     this.options.height = { ...this.options.height, ...config };
 
-    // Update WASM simulation
-    if (this.wasmSimulation) {
-      this.wasmSimulation.setNoiseParams(
-        this.options.height.noiseScale,
-        this.options.height.intensity
-      );
-    }
+    this.wasmSimulation?.setNoiseParams(
+      this.options.height.noiseScale,
+      this.options.height.intensity
+    );
   }
 
-  /**
-   * Update interaction configuration
-   */
   setInteractionConfig(config: Partial<InteractionConfig>): void {
     this.options.interaction = { ...this.options.interaction, ...config };
+    this.mouseHandler.updateInteractionConfig(this.options.interaction);
   }
 
-  /**
-   * Trigger a shockwave at position (defaults to center)
-   */
+  setTransitionConfig(config: Partial<TransitionConfig>): void {
+    this.options.transition = { ...this.options.transition, ...config };
+    this.themeTransition.updateTransitionConfig(this.options.transition);
+  }
+
+  setPerformanceConfig(config: Partial<PerformanceConfig>): void {
+    this.options.performance = { ...this.options.performance, ...config };
+    this.animationLoop.updatePerformanceConfig(this.options.performance);
+  }
+
+  // ========== Public API: Effects ==========
+
   triggerShockwave(x?: number, y?: number): void {
     if (!this.wasmSimulation) return;
 
     const posX = x ?? this.cachedWidth / 2;
     const posY = y ?? this.cachedHeight / 2;
-
     this.wasmSimulation.triggerShockwave(posX, posY);
   }
 
-  /**
-   * Start or stop a gravity well at position
-   */
   setGravityWell(x: number, y: number, active: boolean, attract?: boolean): void {
     if (!this.wasmSimulation) return;
 
-    this.gravityWellActive = active;
     this.wasmSimulation.setGravityWell(
       x,
       y,
       active,
       attract ?? this.options.interaction.gravityWellAttract
     );
-  }
-
-  /**
-   * Update transition configuration
-   */
-  setTransitionConfig(config: Partial<TransitionConfig>): void {
-    this.options.transition = { ...this.options.transition, ...config };
-  }
-
-  /**
-   * Update performance configuration
-   */
-  setPerformanceConfig(config: Partial<PerformanceConfig>): void {
-    this.options.performance = { ...this.options.performance, ...config };
-  }
-
-  /**
-   * Get the current value of an option
-   */
-  getOption<K extends keyof ResolvedOptions>(key: K): ResolvedOptions[K] {
-    return this.options[key];
-  }
-
-  /**
-   * Get the current theme
-   */
-  getTheme(): ThemeDefinition {
-    return this.getEffectiveTheme();
-  }
-
-  /**
-   * Get current FPS (for external display)
-   */
-  getFPS(): number {
-    return this.fps;
   }
 }

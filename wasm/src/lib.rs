@@ -1,7 +1,14 @@
 use wasm_bindgen::prelude::*;
 
+mod constants;
+mod effects;
 mod noise;
+mod physics;
+mod point;
+mod rng;
 mod simulation;
+mod spatial_grid;
+mod triangulation;
 
 pub use simulation::Simulation;
 

@@ -35,27 +35,42 @@ npx vite --port 5173
 ```
 /polygonbackground
 ├── src/
-│   ├── PolygonBackground.ts    # Main component class (TypeScript orchestration)
-│   ├── types.ts                # TypeScript interfaces
-│   ├── constants.ts            # Pre-calculated math constants (TWO_PI, SIMPLEX_*)
-│   ├── utils.ts                # Utility functions (clamp, lerp, smoothstep)
-│   ├── delaunay.ts             # Delaunator integration & ghost points (JS fallback)
-│   ├── noise.ts                # Simplex noise implementation (JS fallback)
-│   ├── lighting.ts             # 3D lighting calculations
+│   ├── PolygonBackground.ts    # Main component class (orchestration)
+│   ├── WasmSimulation.ts       # WASM simulation wrapper
+│   ├── types.ts                # TypeScript interfaces & defaults
 │   ├── themes.ts               # Theme definitions and interpolation
+│   ├── utils.ts                # Utility functions (clamp, lerp, smoothstep)
+│   ├── animation/              # Animation-related modules
+│   │   ├── index.ts            # Module exports
+│   │   ├── AnimationLoop.ts    # Frame loop with FPS control
+│   │   ├── ThemeTransition.ts  # Smooth theme transitions
+│   │   └── FPSDisplay.ts       # FPS counter overlay
+│   ├── events/                 # Event handling modules
+│   │   ├── index.ts            # Module exports
+│   │   ├── MouseHandler.ts     # Mouse interaction handling
+│   │   └── ResizeHandler.ts    # Container resize handling
+│   ├── webgl/                  # WebGL rendering
+│   │   ├── WebGLRenderer.ts    # WebGL2 renderer
+│   │   └── shaders.ts          # GLSL shader sources
 │   └── wasm-pkg/               # Built WASM package (generated, gitignored)
-│       ├── polygon_background_wasm.js
-│       ├── polygon_background_wasm_bg.wasm
-│       └── polygon_background_wasm.d.ts
 ├── wasm/                       # Rust WASM source
-│   ├── Cargo.toml              # Rust dependencies (delaunator, wasm-bindgen)
+│   ├── Cargo.toml              # Rust dependencies
 │   └── src/
 │       ├── lib.rs              # WASM module entry point
-│       ├── simulation.rs       # Core simulation (points, physics, spatial grid)
-│       └── noise.rs            # Simplex/FBM noise in Rust
+│       ├── simulation.rs       # Main simulation state & public API
+│       ├── point.rs            # Point struct & operations
+│       ├── spatial_grid.rs     # Spatial partitioning (uniform grid)
+│       ├── effects.rs          # Shockwave, GravityWell, MouseState
+│       ├── physics.rs          # Physics calculations
+│       ├── triangulation.rs    # Delaunay & vertex buffer generation
+│       ├── noise.rs            # Simplex/FBM noise
+│       ├── rng.rs              # Xorshift32 random number generator
+│       └── constants.rs        # Physics & simulation constants
 ├── test/
-│   └── index.html              # Test page with UI controls (tabs + menu)
-├── index.ts                    # Library entry point (re-exports)
+│   └── index.html              # Test page with UI controls
+├── examples/
+│   └── react/                  # React example app
+├── index.ts                    # Library entry point
 ├── Claude.md                   # This file - project knowledge base
 ├── package.json
 ├── tsconfig.json
@@ -247,12 +262,16 @@ The simulation core is implemented in Rust and compiled to WebAssembly for perfo
 
 ### Key Files
 
-- **`wasm/src/simulation.rs`**: Core simulation with ~900 lines
-  - `Simulation` struct: Main state container
-  - `Point` struct: Position, velocity, displacement, height
-  - `SpatialGrid` struct: Uniform grid for spatial partitioning
-  - `Shockwave` / `GravityWell`: Effect structs
-  - Physics: spring-back, damping, velocity influence
+The WASM code is split into focused modules:
+
+- **`wasm/src/simulation.rs`**: Main simulation state & WASM public API (~370 lines)
+- **`wasm/src/point.rs`**: Point struct with position, velocity, height calculation
+- **`wasm/src/spatial_grid.rs`**: Uniform grid for O(k) spatial queries
+- **`wasm/src/effects.rs`**: Shockwave, GravityWell, MouseState, MouseMode
+- **`wasm/src/physics.rs`**: Physics calculations (mouse, gravity, shockwaves)
+- **`wasm/src/triangulation.rs`**: Ghost points, Delaunay, vertex buffer building
+- **`wasm/src/constants.rs`**: All physics/threshold constants
+- **`wasm/src/rng.rs`**: Xorshift32 random number generator
 
 - **`wasm/src/noise.rs`**: Simplex noise + FBM
   - `noise3d()`: 3D Simplex noise
@@ -442,8 +461,7 @@ Calculated using:
 ## Dependencies
 
 ### JavaScript/TypeScript
-- `delaunator`: ^5.0.1 - Fast Delaunay triangulation (JS fallback)
-- `@types/delaunator`: ^5.0.3 - Type definitions
+- **Zero runtime dependencies** - all simulation runs in WASM
 - `vite`: ^5.4.11 - Build tool (dev)
 - `typescript`: ^5.3.3 - Language (dev)
 - `vite-plugin-dts`: ^4.3.0 - Declaration file generation (dev)
