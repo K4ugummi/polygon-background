@@ -88,6 +88,80 @@ const GRAVITY_WELL_REPEL_STRENGTH: f32 = -5.0;
 /// Minimum squared distance to avoid division issues
 const MIN_DIST_SQ: f32 = 1.0;
 
+/// Maximum range for gravity well spatial query
+const GRAVITY_WELL_MAX_RANGE: f32 = 1000.0;
+
+/// Uniform grid for spatial partitioning
+struct SpatialGrid {
+    cells: Vec<Vec<usize>>,  // cell index -> list of point indices
+    cell_size: f32,
+    cols: usize,
+    rows: usize,
+    width: f32,
+    height: f32,
+}
+
+impl SpatialGrid {
+    fn new(width: f32, height: f32, cell_size: f32) -> Self {
+        let cell_size = cell_size.max(1.0);
+        let cols = ((width / cell_size).ceil() as usize).max(1);
+        let rows = ((height / cell_size).ceil() as usize).max(1);
+        Self {
+            cells: vec![Vec::new(); cols * rows],
+            cell_size,
+            cols,
+            rows,
+            width,
+            height,
+        }
+    }
+
+    fn clear(&mut self) {
+        for cell in &mut self.cells {
+            cell.clear();
+        }
+    }
+
+    fn resize(&mut self, width: f32, height: f32, cell_size: f32) {
+        self.width = width;
+        self.height = height;
+        self.cell_size = cell_size.max(1.0);
+        self.cols = ((width / self.cell_size).ceil() as usize).max(1);
+        self.rows = ((height / self.cell_size).ceil() as usize).max(1);
+        let new_size = self.cols * self.rows;
+        self.cells.resize_with(new_size, Vec::new);
+        self.clear();
+    }
+
+    #[inline]
+    fn cell_index(&self, x: f32, y: f32) -> usize {
+        let col = ((x / self.cell_size) as usize).min(self.cols - 1);
+        let row = ((y / self.cell_size) as usize).min(self.rows - 1);
+        row * self.cols + col
+    }
+
+    fn insert(&mut self, point_index: usize, x: f32, y: f32) {
+        let idx = self.cell_index(x, y);
+        self.cells[idx].push(point_index);
+    }
+
+    /// Query all points within radius of (cx, cy)
+    /// Returns an iterator over point indices
+    fn query_radius(&self, cx: f32, cy: f32, radius: f32) -> impl Iterator<Item = usize> + '_ {
+        let min_col = ((cx - radius) / self.cell_size).floor().max(0.0) as usize;
+        let max_col = ((cx + radius) / self.cell_size).ceil().min(self.cols as f32) as usize;
+        let min_row = ((cy - radius) / self.cell_size).floor().max(0.0) as usize;
+        let max_row = ((cy + radius) / self.cell_size).ceil().min(self.rows as f32) as usize;
+
+        (min_row..max_row)
+            .flat_map(move |row| {
+                (min_col..max_col).flat_map(move |col| {
+                    self.cells[row * self.cols + col].iter().copied()
+                })
+            })
+    }
+}
+
 /// Main simulation state
 #[wasm_bindgen]
 pub struct Simulation {
@@ -125,6 +199,9 @@ pub struct Simulation {
     // Effects
     shockwaves: Vec<Shockwave>,
     gravity_well: Option<GravityWell>,
+
+    // Spatial partitioning
+    spatial_grid: SpatialGrid,
 }
 
 #[wasm_bindgen]
@@ -164,6 +241,9 @@ impl Simulation {
             });
         }
 
+        // Use mouse_radius as default cell size basis
+        let default_cell_size = 150.0 / 2.0; // half of default mouse_radius
+
         Self {
             points,
             width,
@@ -189,6 +269,7 @@ impl Simulation {
             velocity_influence: DEFAULT_VELOCITY_INFLUENCE,
             shockwaves: Vec::new(),
             gravity_well: None,
+            spatial_grid: SpatialGrid::new(width, height, default_cell_size),
         }
     }
 
@@ -424,6 +505,21 @@ impl Simulation {
             point.y = point.base_y + point.dy;
         }
 
+        // Rebuild spatial grid for efficient spatial queries
+        let max_shockwave_radius = self.shockwaves.iter()
+            .map(|w| w.radius + SHOCKWAVE_WAVE_WIDTH)
+            .fold(0.0f32, f32::max);
+        let gravity_well_range = if self.gravity_well.is_some() {
+            GRAVITY_WELL_MAX_RANGE
+        } else {
+            0.0
+        };
+        let max_radius = self.mouse_radius
+            .max(max_shockwave_radius)
+            .max(gravity_well_range);
+        let cell_size = (max_radius / 2.0).max(50.0);
+        self.rebuild_grid(cell_size);
+
         // Apply mouse influence
         self.apply_mouse_influence();
 
@@ -446,14 +542,21 @@ impl Simulation {
 
     /// Apply shockwave forces to points
     fn apply_shockwave_forces(&mut self) {
-        for wave in &self.shockwaves {
+        // Clone shockwaves to avoid borrow issues with spatial_grid
+        let shockwaves: Vec<Shockwave> = self.shockwaves.clone();
+
+        for wave in &shockwaves {
             // Pre-calculate bounds for early exit
             let min_radius = (wave.radius - SHOCKWAVE_WAVE_WIDTH).max(0.0);
             let max_radius = wave.radius + SHOCKWAVE_WAVE_WIDTH;
             let min_radius_sq = min_radius * min_radius;
             let max_radius_sq = max_radius * max_radius;
 
-            for point in &mut self.points {
+            // Query nearby points using spatial grid (use max_radius as query radius)
+            let nearby: Vec<usize> = self.spatial_grid.query_radius(wave.x, wave.y, max_radius).collect();
+
+            for point_idx in nearby {
+                let point = &mut self.points[point_idx];
                 let dx = point.x - wave.x;
                 let dy = point.y - wave.y;
                 let dist_sq = dx * dx + dy * dy;
@@ -484,13 +587,22 @@ impl Simulation {
 
     /// Apply gravity well force
     fn apply_gravity_well(&mut self) {
-        if let Some(well) = &self.gravity_well {
+        if let Some(well) = self.gravity_well {
             let min_dist_sq = GRAVITY_WELL_MIN_DIST * GRAVITY_WELL_MIN_DIST;
 
-            for point in &mut self.points {
+            // Query nearby points using spatial grid
+            let nearby: Vec<usize> = self.spatial_grid.query_radius(well.x, well.y, GRAVITY_WELL_MAX_RANGE).collect();
+
+            for point_idx in nearby {
+                let point = &mut self.points[point_idx];
                 let dx = well.x - point.x;
                 let dy = well.y - point.y;
                 let dist_sq = dx * dx + dy * dy;
+
+                // Skip if beyond max range
+                if dist_sq > GRAVITY_WELL_MAX_RANGE * GRAVITY_WELL_MAX_RANGE {
+                    continue;
+                }
 
                 // Use squared distance for minimum check
                 let dist = if dist_sq < min_dist_sq {
@@ -527,7 +639,11 @@ impl Simulation {
         let mouse_speed = mouse_speed_sq.sqrt();
         let velocity_boost = 1.0 + mouse_speed * self.velocity_influence;
 
-        for point in &mut self.points {
+        // Query only nearby points using spatial grid
+        let nearby: Vec<usize> = self.spatial_grid.query_radius(mx, my, radius).collect();
+
+        for point_idx in nearby {
+            let point = &mut self.points[point_idx];
             let dx = point.x - mx;
             let dy = point.y - my;
             let dist_sq = dx * dx + dy * dy;
@@ -575,6 +691,22 @@ impl Simulation {
                     point.dy += ny * push * 0.2;
                 }
             }
+        }
+    }
+
+    /// Rebuild spatial grid with all current point positions
+    fn rebuild_grid(&mut self, cell_size: f32) {
+        // Resize if cell size changed significantly or dimensions changed
+        if (self.spatial_grid.cell_size - cell_size).abs() > 1.0
+           || self.spatial_grid.width != self.width
+           || self.spatial_grid.height != self.height {
+            self.spatial_grid.resize(self.width, self.height, cell_size);
+        } else {
+            self.spatial_grid.clear();
+        }
+
+        for (i, point) in self.points.iter().enumerate() {
+            self.spatial_grid.insert(i, point.x, point.y);
         }
     }
 
