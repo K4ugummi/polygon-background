@@ -60,8 +60,10 @@ export class PolygonBackground {
 
     // Validate and resolve options
     const validatedOptions = options ? validateOptions(options) : undefined;
-    const themeName = validatedOptions?.theme || DEFAULT_OPTIONS.theme;
-    const initialTheme = getTheme(themeName);
+    const themeOption = validatedOptions?.theme;
+    const initialTheme = themeOption
+      ? (typeof themeOption === 'string' ? getTheme(themeOption) : themeOption)
+      : getTheme(DEFAULT_OPTIONS.theme);
 
     this.options = this.resolveOptions(validatedOptions, initialTheme);
 
@@ -185,7 +187,7 @@ export class PolygonBackground {
       responsive: options?.responsive ?? DEFAULT_OPTIONS.responsive,
       scalePointsWithSize: options?.scalePointsWithSize ?? DEFAULT_OPTIONS.scalePointsWithSize,
       pointsPerPixel: options?.pointsPerPixel ?? DEFAULT_OPTIONS.pointsPerPixel,
-      theme: options?.theme ?? DEFAULT_OPTIONS.theme,
+      theme: typeof options?.theme === 'string' ? options.theme : (options?.theme ? 'custom' : DEFAULT_OPTIONS.theme),
       light: {
         ...DEFAULT_LIGHT,
         ...(theme.lightPosition && { position: theme.lightPosition }),

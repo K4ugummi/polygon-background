@@ -140,7 +140,7 @@ export interface PolygonBackgroundOptions {
 
   // Theme
   /** Theme name or custom theme definition */
-  theme?: string;
+  theme?: string | import('./themes').ThemeDefinition;
 
   // Lighting
   /** Light configuration */
